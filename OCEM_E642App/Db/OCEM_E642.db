@@ -1,0 +1,45 @@
+record(stringin, "$(P):$(R):InputAddress") {
+    field(DESC, "Address del comando da eseguire")
+}
+
+
+record(stringin, "$(P):$(R):CmdStatusReady") {
+    field(DESC, "Stringa Status pronta da inviare")
+    field(FLNK, "$(P):$(R):Status")
+    
+}
+
+
+
+# record(sub, "$(P):$(R):LoadStatusInputs") {
+#     field(DESC, "Prepara comando per Status")
+#     field(SNAM, "cdcSubroutine" )  
+#     field(INPA, "$(P):$(R):InputAddress")
+#     # InputAddress già inizializzato, non serve modificare
+#     field(INPB, "STA")           # scrive il comando STA su InputCommand
+#     field(INPC, "")              # scrive stringa vuota su InputParam
+#     #field(INPD, "$(P):$(R):CmdStatusReady")
+#     field(FLNK, "$(P):$(R):CmdStatusReady")  
+#     field(SCAN, "Passive") 
+# }
+
+
+
+record(ai, "$(P):$(R):Status") {
+    field(DESC, "Legge lo stato")
+    
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(PORT) 106 STA")
+    field(SCAN, "1 second")
+    
+    #field(INP, "@OCEMSerialPowersupply.proto getStatus($(ADDR) , $(P):$(R):CmdStatusReady) $(PORT)")
+    #field(INPA, "$(P):$(R):CmdStatusReady CP")  # legge la stringa prodotta da BuildCmd
+    
+}
+
+# record(ao, "$(P)SetCurrent") {
+#     field(DESC, "Imposta la corrente")
+#     field(DTYP, "stream")
+#     field(OUT, "@OCEMSerialPowersupply.proto setCurrent $(PORT)")
+#     field(PREC, "3")
+# }

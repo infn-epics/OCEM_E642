@@ -1,0 +1,6 @@
+epicsEnvSet("IOC","iocOCEM_E642")
+epicsEnvSet("TOP","/home/epics/OCEM_E642")
+epicsEnvSet("EPICS_BASE","/epics/epics-base")
+epicsEnvSet("SUPPORT","/epics/support")
+epicsEnvSet("ASYN","/epics/support/asyn")
+epicsEnvSet("STREAMDEVICE","/epics/support/StreamDevice")

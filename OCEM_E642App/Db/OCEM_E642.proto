@@ -1,0 +1,28 @@
+# ocem.proto
+
+Terminator = "";     # Terminatore dei comandi OCEM (modifica se diverso)
+ReplyTimeout = 500;      # Timeout per la risposta (ms)
+ReadTimeout = 1000;      # Timeout totale per lettura (ms)
+
+
+rawSend {
+    out "%s";   # prende la stringa ricevuta da BuildCmd
+    in "%s";    # opzionale: se ti aspetti una risposta
+}
+
+
+# Lettura dello Stato
+getStatus {
+    Terminator = ""; 
+    out "\x05""\$1";
+    in "%*c";    
+    #Terminator = "\r\n";
+    out "%s";    # Comando inviato a OCEM
+    in "%s";             # OCEM risponde con una stringa
+}
+
+# Set della corrente
+setCurrent {
+    out "SET:CURR %f";   # Invia il comando con valore float
+    in "OK";             # OCEM risponde "OK" se ha ricevuto correttamente
+}
