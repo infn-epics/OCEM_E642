@@ -20,6 +20,7 @@
 typedef struct {
     int address;
     char cmd[32];
+    char port[32];
 } ocemRecordPvt;
 
 /* init_record */
@@ -27,6 +28,7 @@ static long init_record_ai_devAiOCEM(aiRecord *prec)
 {
     // Se dpvt è già allocato, non facciamo nulla
     if (prec->dpvt) {
+        printf("OCEM: init_record_ai_devAiOCEM dpvt già allocato\n");
         return 0;
     }
 
@@ -54,15 +56,21 @@ static long init_record_ai_devAiOCEM(aiRecord *prec)
         return S_db_noMemory;
     }
 
-    // Parse stringa, esempio: "1 STA"
-    char port[32];
-    if (sscanf(parm, "%31s %d %31s",port, &dpvt->address, dpvt->cmd) < 3) {
+    // Parse stringa, esempio: "OCEM_PORT 106 STA"
+    
+    if (sscanf(parm, "%31s %d %31s",dpvt->port, &dpvt->address, dpvt->cmd) < 3) {
         recGblRecordError(S_db_badField, (void*)prec,
             "init_record_ai_devAiOCEM: cannot parse INP string");
         free(dpvt);
         return S_db_badField;
     }
-    printf("OCEM: init_record_ai_devAiOCEM %s to address %x\n",dpvt->cmd,dpvt->address);
+    size_t len = strlen(dpvt->cmd);
+if (len + 2 < sizeof(dpvt->cmd)) {
+    //dpvt->cmd[len]   = '\r';
+    //dpvt->cmd[len+1] = '\n';
+    //dpvt->cmd[len+2] = '\0';
+}
+    printf("OCEM: init_record_ai_devAiOCEM %s to address %x, port %s\n",dpvt->cmd,dpvt->address,dpvt->port);
     // Salva dpvt nel record
     prec->dpvt = dpvt;
     return 0;
@@ -72,13 +80,13 @@ static long init_record_ai_devAiOCEM(aiRecord *prec)
 static long report_devAiOCEM(int pass) {  errlogPrintf("OCEM: report_devAiOCEM chiamata, pass=%d\n", pass);return 0; }
 static long init_devAiOCEM(int pass) {  errlogPrintf("OCEM: init_devAiOCEM chiamata, pass=%d\n", pass);return 0; }
 
-static long read_ai_devAiOCEM(aiRecord *prec);
 
 /* Calcolo CDC: XOR di tutti i byte tranne il primo (STX) */
-static unsigned char ocem_calc_cdc(const unsigned char *buf, size_t len) {
+static unsigned char ocem_calc_cdc(const unsigned char *buf, size_t cmdLen) {
     unsigned char cdc = 0;
-    if (len > 1) {
-        for (size_t i = 1; i < len; i++) {
+    errlogPrintf("Len command = %ld\n",cmdLen);
+    if (cmdLen > 1) {
+        for (size_t i = 1; i <= 2 + cmdLen; i++) {
             cdc ^= buf[i];
         }
     }
@@ -106,32 +114,36 @@ int ocem_transaction(asynUser *pasynUser,
 
     unsigned char msg[256];
     size_t msgLen;
-    errlogPrintf("Into ocem_transaction pasynUser=%p\n", pasynUser);
+    //errlogPrintf("Into ocem_transaction pasynUser=%p\n", pasynUser);
     /* 1. Ottieni interfaccia Octet */
     pInterface=pasynManager->findInterface(pasynUser, asynOctetType, 1);
-    pOctet = (asynOctet*) pInterface;
+    //pOctet = (asynOctet*) pInterface;
+    pOctet = (asynOctet *) pInterface->pinterface;
+
+    //void *octetDrvPvt = pInterface->drvPvt;
     if (!pOctet) {
         errlogPrintf("ocem_transaction: asynOctet non disponibile\n");
         return -1;
     }
-    errlogPrintf("pOctet =%p\n",pOctet);
-    errlogPrintf("pInterface->drvPvt =%p\n",pInterface->drvPvt);
+    //errlogPrintf("pOctet =%p\n",pOctet);
+    //errlogPrintf("pInterface->drvPvt =%p\n",pInterface->drvPvt);
     
     /* 2. Invia ENQ + address */
     msg[0] = 0x05;        // ENQ
     msg[1] = (unsigned char) address;
     msgLen = 2;
+    //pOctet->flush(pInterface->drvPvt, pasynUser);
     errlogPrintf("Writing ENQ + address %c\n",msg[1]);
     status = pOctet->write(pInterface->drvPvt, pasynUser, (const char*)msg, msgLen, &nbytesOut);
     if (status != asynSuccess) {
         errlogPrintf("ocem_transaction: errore write ENQ\n");
         return -1;
     }
-
+    epicsThreadSleep(0.05);
     /* 3. Leggi ACK/NAK */
     unsigned char ackBuf[1];
     errlogPrintf("Reading ENQ + address answer\n");
-    status = pOctet->read(NULL,pasynUser, (char*)ackBuf, 1,  &nbytesIn, &eomReason);
+    status = pOctet->read(pInterface->drvPvt,pasynUser, (char*)ackBuf, 1,  &nbytesIn, &eomReason);
     if (status != asynSuccess || nbytesIn == 0) {
         errlogPrintf("ocem_transaction: timeout o errore in attesa di ACK/NAK\n");
         return -1;
@@ -141,6 +153,7 @@ int ocem_transaction(asynUser *pasynUser,
         errlogPrintf("ocem_transaction: ricevuto NAK (0x%02X)\n", ackBuf[0]);
         return -1;
     }
+    errlogPrintf("ocem_transaction: ricevuto ACK (0x%02X)\n", ackBuf[0]);
 
     /* 4. Prepara STX + addr + cmd + ETX + CDC */
     size_t cmdLen = strlen(cmd);
@@ -148,26 +161,39 @@ int ocem_transaction(asynUser *pasynUser,
     msg[1] = (unsigned char) address;
     memcpy(&msg[2], cmd, cmdLen);
     msg[2 + cmdLen] = 0x03; // ETX
-    unsigned char cdc = ocem_calc_cdc(msg, 3 + cmdLen); // fino a ETX compreso
+    unsigned char cdc = ocem_calc_cdc(msg, cmdLen); 
     msg[3 + cmdLen] = cdc;
     msgLen = 4 + cmdLen;
 
     /* 5. Scrivi comando completo */
-    status = pOctet->write(NULL,pasynUser, (const char*)msg, msgLen, &nbytesOut);
+    // Debug: dump dei byte da inviare
+errlogPrintf("OCEM: sending message (len=%zu): ", msgLen);
+for (size_t i = 0; i < msgLen; i++) {
+    errlogPrintf("%02X ", (unsigned char)msg[i]);
+}
+errlogPrintf("\n");
+    
+    status = pOctet->write(pInterface->drvPvt,pasynUser, (const char*)msg, msgLen, &nbytesOut);
+    errlogPrintf("ocem_transaction: comando scritto, status=%d, nbytesOut=%zu\n", status, nbytesOut);
     if (status != asynSuccess) {
         errlogPrintf("ocem_transaction: errore write comando\n");
         return -1;
     }
-
+    epicsThreadSleep(0.05);
     /* 6. Leggi risposta */
+    pasynUser->timeout = 1.0;
+    errlogPrintf("Reading answer\n");
     memset(response, 0, responseSize);
-    status = pOctet->read(NULL,pasynUser, response, responseSize-1,  &nbytesIn, &eomReason);
+    status = pOctet->read(pInterface->drvPvt,pasynUser, response, responseSize-1,  &nbytesIn, &eomReason);
     if (status != asynSuccess) {
         errlogPrintf("ocem_transaction: errore read risposta\n");
+        errlogPrintf("ocem_transaction: read ricevuto, status=%d, nbytesIn=%zu, eomReason=%d\n", status, nbytesIn,eomReason);
+        errlogPrintf("ocem_transaction: read ricevuto byte 0x%02X\n", (unsigned char)response[0]);
         return -1;
     }
 
     response[nbytesIn] = '\0';
+    errlogPrintf("Read answer %s\n",response);
     return 0;
 }
 
@@ -177,10 +203,11 @@ static long read_ai_devAiOCEM(aiRecord *prec)
     if (!prec->dpvt) 
     {
         long ret=init_record_ai_devAiOCEM(prec);
-        if (ret != 0) {
-        recGblSetSevr(prec, READ_ALARM, INVALID_ALARM);
-        return -1;
-    }
+        if (ret != 0) 
+        {
+            recGblSetSevr(prec, READ_ALARM, INVALID_ALARM);
+            return -1;
+        }
         errlogPrintf("returning from init_record\n");
     } 
 
@@ -193,8 +220,8 @@ static long read_ai_devAiOCEM(aiRecord *prec)
     //errlogPrintf("assigned *dpvt\n");
 
     asynUser *pau = pasynManager->createAsynUser(0,0);
-    asynStatus st = pasynManager->connectDevice(pau, "OCEM_PORT", 0);
-    //errlogPrintf("created asynStatus \n");
+    asynStatus st = pasynManager->connectDevice(pau, dpvt->port, 0);
+    
     if (st) {
         errlogPrintf("OCEM %s: connectDevice failed (%d)\n", prec->name, st);
         pasynManager->freeAsynUser(pau);
@@ -205,15 +232,19 @@ static long read_ai_devAiOCEM(aiRecord *prec)
     {
         errlogPrintf("Connected to device\n");
     }
-    errlogPrintf("prima di ocem_transaction \npasynUser=%p\n", pau);
+    //errlogPrintf("prima di ocem_transaction \npasynUser=%p\n", pau);
     char resp[256] = {0};
+   
+
+    
+
     int ret = ocem_transaction(pau, dpvt->address, dpvt->cmd, resp, sizeof(resp));
-    errlogPrintf("dopo ocem_transaction \n");
+    //errlogPrintf("dopo ocem_transaction \n");
     pasynManager->freeAsynUser(pau);
 
     if (ret == 0) {
         errlogPrintf("OCEM %s: resp='%s'\n", prec->name, resp);
-        prec->val = atof(resp);     // se risposta numerica
+        //prec->val = atof(resp);     // se risposta numerica
         prec->udf = 0;
         return 2;                   // VAL già impostato
     } else {

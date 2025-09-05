@@ -3,11 +3,11 @@ record(stringin, "$(P):$(R):InputAddress") {
 }
 
 
-record(stringin, "$(P):$(R):CmdStatusReady") {
-    field(DESC, "Stringa Status pronta da inviare")
-    field(FLNK, "$(P):$(R):Status")
+# record(stringin, "$(P):$(R):CmdStatusReady") {
+#     field(DESC, "Stringa Status pronta da inviare")
+#     field(FLNK, "$(P):$(R):Status")
     
-}
+# }
 
 
 
@@ -37,9 +37,4 @@ record(ai, "$(P):$(R):Status") {
     
 }
 
-# record(ao, "$(P)SetCurrent") {
-#     field(DESC, "Imposta la corrente")
-#     field(DTYP, "stream")
-#     field(OUT, "@OCEMSerialPowersupply.proto setCurrent $(PORT)")
-#     field(PREC, "3")
-# }
+
