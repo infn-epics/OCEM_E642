@@ -1,2 +1,2 @@
-device(ai, INST_IO, devAiOCEM, "OCEME642")
+device(stringin, INST_IO, devSiOCEM , "OCEME642")
 

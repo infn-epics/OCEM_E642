@@ -32,7 +32,7 @@ drvAsynIPPortConfigure("OCEM_PORT", "192.168.192.20:4001")
 
 
 # Load database records ## ports name are already define in db
-dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SERIAL0, PORT=OCEM_PORT, ADDR='j'")
+dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SERIAL0, PORT=OCEM_PORT, ADDR='k'")
 #dbLoadRecords("$(TOP)/db/unimag-ocem.db", "P=SPARC:MAG:OCEM,R=PLXDPL01")
 
 iocInit()
