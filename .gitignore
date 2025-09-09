@@ -1,0 +1,11 @@
+# Ignora build e output binari
+OCEM_E642App/Db/O.linux-x86_64/
+OCEM_E642App/src/O.Common/
+OCEM_E642App/src/O.linux-x86_64/
+bin/
+configure/O.linux-x86_64/
+db/
+dbd/
+
+# Storia locale (non utile per versionamento)
+.iocsh_history
