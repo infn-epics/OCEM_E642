@@ -13,8 +13,8 @@ epicsEnvSet("STREAM_PROTOCOL_PATH", "../../db")
 
 # Configure Serial communication
 
-drvAsynIPPortConfigure("OCEM_PORT", "192.168.192.20:4001") 
-
+#drvAsynIPPortConfigure("OCEM_PORT", "192.168.192.20:4001") 
+ocemInit "192.168.192.20:4001",2,"10,11"
 
  
 
@@ -32,11 +32,8 @@ drvAsynIPPortConfigure("OCEM_PORT", "192.168.192.20:4001")
 
 
 # Load database records ## ports name are already define in db
-dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SERIAL0, PORT=OCEM_PORT, ADDR='k'")
+dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SLAVE10, PORT=OCEM_PORT, ADDR=10")
+dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SLAVE11, PORT=OCEM_PORT, ADDR=11")
 #dbLoadRecords("$(TOP)/db/unimag-ocem.db", "P=SPARC:MAG:OCEM,R=PLXDPL01")
 
 iocInit()
-epicsThreadSleep(1.0)
-
-# inizializzo il campo InputAddress
-dbpf BTF:MAG:OCEM:SERIAL0:InputAddress 'j'

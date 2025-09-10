@@ -29,22 +29,22 @@ record(stringin, "$(P):$(R):Status") {
     field(DESC, "Legge lo stato")
     
     field(DTYP, "OCEME642")
-    field(INP,  "@$(PORT) 106 STA")
-    field(SCAN, "5 second")
+    #field(INP,  "@$(PORT) 106 STA")
+    field(INP,  "@$(ADDR) STA")
+    field(SCAN, "I/O Intr")
     
-    #field(INP, "@OCEMSerialPowersupply.proto getStatus($(ADDR) , $(P):$(R):CmdStatusReady) $(PORT)")
-    #field(INPA, "$(P):$(R):CmdStatusReady CP")  # legge la stringa prodotta da BuildCmd
+   
     
 }
 record(stringin, "$(P):$(R):Current") {
     field(DESC, "Legge lo stato")
-    
+   
     field(DTYP, "OCEME642")
-    field(INP,  "@$(PORT) 106 COR")
-    field(SCAN, "2 second")
+    #field(INP,  "@$(PORT) 106 COR")
+    field(INP,  "@$(ADDR) COR")
+    field(SCAN, "I/O Intr")
     
-    #field(INP, "@OCEMSerialPowersupply.proto getStatus($(ADDR) , $(P):$(R):CmdStatusReady) $(PORT)")
-    #field(INPA, "$(P):$(R):CmdStatusReady CP")  # legge la stringa prodotta da BuildCmd
+    
     
 }
 

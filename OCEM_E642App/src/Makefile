@@ -40,7 +40,9 @@ OCEM_E642_DBD += stream.dbd
 
 
 OCEM_E642_SRCS += OCEM_E642_registerRecordDeviceDriver.cpp
-OCEM_E642_SRCS += ocemCdc.c
+#OCEM_E642_SRCS += ocemCdc.c
+OCEM_E642_SRCS += drvOCEM.c
+OCEM_E642_SRCS += devOCEM.c
 OCEM_E642_DBD += $(TOP)/OCEM_E642App/Db/ocemCdc.dbd
 
 #USR_SRCS += ocemCdc.c
@@ -52,6 +54,7 @@ OCEM_E642_SRCS_vxWorks += -nil-
 # Link in the code from our support library
 OCEM_E642_LIBS += asyn
 OCEM_E642_LIBS += stream
+OCEM_E642_LIBS += dbCore
 # To build SNL programs, SNCSEQ must be defined
 # in the <top>/configure/RELEASE file
 
