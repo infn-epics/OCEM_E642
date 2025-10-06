@@ -1,3 +1,4 @@
 registrar(drvOCEMRegister)
 device(stringin, INST_IO, devSiOCEM , "OCEME642")
+device(stringout, INST_IO, devSoOCEM, "OCEME642")
 

@@ -13,23 +13,12 @@ epicsEnvSet("STREAM_PROTOCOL_PATH", "../../db")
 
 # Configure Serial communication
 
-#drvAsynIPPortConfigure("OCEM_PORT", "192.168.192.20:4001") 
-ocemInit "192.168.192.20:4001",2,"10,11"
+drvAsynIPPortConfigure("OCEM_PORT", "192.168.192.20:4001") 
+ocemInit "OCEM_PORT",2,"10,11"
 
  
-
-
-
 #asynSetTraceIOMask("readback_all", 0, 4)
 #asynSetTraceMask("readback_all", 0,8)
-
-#asynSetTraceIOMask("command_port", 0, 4)
-#asynSetTraceMask("command_port", 0,9)
-
-
-
-
-
 
 # Load database records ## ports name are already define in db
 dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SLAVE10, PORT=OCEM_PORT, ADDR=10")

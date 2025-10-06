@@ -27,25 +27,46 @@ record(stringin, "$(P):$(R):InputAddress") {
 
 record(stringin, "$(P):$(R):Status") {
     field(DESC, "Legge lo stato")
-    
     field(DTYP, "OCEME642")
     #field(INP,  "@$(PORT) 106 STA")
     field(INP,  "@$(ADDR) STA")
     field(SCAN, "I/O Intr")
-    
-   
-    
 }
 record(stringin, "$(P):$(R):Current") {
-    field(DESC, "Legge lo stato")
-   
+    field(DESC, "Legge la corrente")
     field(DTYP, "OCEME642")
     #field(INP,  "@$(PORT) 106 COR")
     field(INP,  "@$(ADDR) COR")
     field(SCAN, "I/O Intr")
-    
-    
-    
 }
 
+record(stringin, "$(P):$(R):Voltage") {
+    field(DESC, "Legge la tensione")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) TEN")
+    field(SCAN, "I/O Intr")
+}
 
+record(stringin, "$(P):$(R):Polarity") {
+    field(DESC, "Legge la polarità")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) POL")
+    field(SCAN, "I/O Intr")
+}
+record(stringin, "$(P):$(R):Alarms") {
+    field(DESC, "Legge gli allarmi")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) ALL")
+    field(SCAN, "I/O Intr")
+}
+
+record(stringout, "$(P):$(R):SetON") {
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) ON")    # indirizzo + eventuale parametro
+    #field(VAL,  "RST")        # valore di default
+}
+record(stringout, "$(P):$(R):SetSTANDBY") {
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) STB")    # indirizzo + eventuale parametro
+    #field(VAL,  "RST")        # valore di default
+}
