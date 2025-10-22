@@ -4,15 +4,9 @@
 #include <ctype.h>
 #include <time.h>
 
-
-#define LOGLEVEL 0
-#define errlogPrintf1(...) \
-    do { if (LOGLEVEL >= 1) errlogPrintf(__VA_ARGS__); } while(0)
-//#define errlogPrintf1
-// static const char *simStrings[] = {
-//     "JSTA STB", "10COR 2", "11STA ON", "11COR 3", "11TEN 100","10STA ON","10TEN 24","10COR 4.5","11STA STB"
-// };
-// static const int nSimStrings = sizeof(simStrings)/sizeof(simStrings[0]);
+double ocemPollingPeriod = 1.0;   // default 1 second
+epicsExportAddress(double, ocemPollingPeriod);
+// 777 : x = 65535 : 380 
 
  unsigned char ocem_calc_cdc(const unsigned char *buf, size_t cmdLen) {
     unsigned char cdc = 0;
@@ -26,13 +20,42 @@
     return cdc;
 }
 OCEM_Slave* findSlave(OCEM_Driver* drv,int slaveAddress);
+
+int parsePRGAnswer(const char*answer,char*chan,int* minval,int*maxval)
+{
+    char readChan[3];
+    if (strlen(answer) < 2)
+        return -1;
+    strncpy(readChan,answer,2);
+    readChan[2]='\0';
+    if (strcmp(readChan,chan))
+    {
+        return -1;
+    }
+    char minimum[7],maximum[7];
+    for (int i=3;i <10;i++)
+    {
+        minimum[i-3]=answer[i];
+    }
+    *minval=atoi(minimum);
+    
+    for (int i=11;i <18;i++)
+    {
+        maximum[i-11]=answer[i];
+    }
+    *maxval=atoi(maximum);
+    return 0;
+
+
+}
+
 void ActivateInterrupt(int slaveId,char* cmd, char* val)
 {
             // trova slave corrispondente
     OCEM_Slave *slave = findSlave(drv, slaveId);
     if (!slave) 
     {
-        printf("Unknown slave addr=%d\n", slaveId);
+        errlogPrintf("Unknown slave addr=%d\n", slaveId);
         epicsThreadSleep(1.0);
         return;
     }
@@ -60,12 +83,43 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         slave->polarity[sizeof(slave->polarity)-1] = '\0';
         scanIoRequest(slave->ioscanPolarity);
     }
-     else if (strcmp(cmd, "ALL") == 0) 
+    else if (strcmp(cmd, "ALL") == 0) 
     {
         
         strncpy(slave->alarms, val, sizeof(slave->alarms));
         slave->alarms[sizeof(slave->alarms)-1] = '\0';
         scanIoRequest(slave->ioscanAlarms);
+    }
+    else if (strcmp(cmd, "SEL") == 0) 
+    {
+        if (!strcmp(val,"PRE"))
+        {
+            strncpy(slave->selector, "REMOTE", sizeof(slave->selector));
+        }
+        else
+        {
+            strncpy(slave->selector, val, sizeof(slave->selector));
+        }
+        slave->selector[sizeof(slave->selector)-1] = '\0';
+        scanIoRequest(slave->ioscanSelector);
+    }
+    else  if (strcmp(cmd, "PRG") == 0) 
+    {
+        int minvalue;int maxvalue;
+        if (parsePRGAnswer(val,"O0",&minvalue,&maxvalue) == 0)
+        {
+            slave->currentPrgL=minvalue;
+            slave->currentPrgH=maxvalue;
+            scanIoRequest(slave->ioscanInit);
+            errlogPrintf("CURRENT PRG: min : %d max %d\n",minvalue,maxvalue);
+        }
+        else if (parsePRGAnswer(val,"O1",&minvalue,&maxvalue) == 0)
+        {
+            slave->voltagePrgL=minvalue;
+            slave->voltagePrgH=maxvalue;
+            scanIoRequest(slave->ioscanInit);
+            errlogPrintf("VOLTAGE PRG:  min : %d max %d\n",minvalue,maxvalue);
+        }
     }
 
 
@@ -371,7 +425,10 @@ static void ocem_polling(void *arg) {
     
     char response[128];
     size_t responseSize=128;
-    
+    for (int i=0; i < drv->nSlaves;i++)
+    {
+        send_command(drv,drv->addrList[i],"PRG S",response,responseSize);
+    }
     while(drv->running) 
     {
         for (int i=0; i < drv->nSlaves;i++)
@@ -394,7 +451,7 @@ static void ocem_polling(void *arg) {
             epicsMutexUnlock(drv->ioLock);
 
         }
-        epicsThreadSleep(2.0); // periodo di polling
+        epicsThreadSleep(ocemPollingPeriod); // periodo di polling
     }
 }
 
@@ -433,7 +490,9 @@ static void ocem_init(const char *port, int nSlaves, const char *addrListStr) {
         scanIoInit(&drv->slaves[addr].ioscanCurrent);
         scanIoInit(&drv->slaves[addr].ioscanVoltage);
         scanIoInit(&drv->slaves[addr].ioscanPolarity);
-         scanIoInit(&drv->slaves[addr].ioscanAlarms);
+        scanIoInit(&drv->slaves[addr].ioscanAlarms);
+        scanIoInit(&drv->slaves[addr].ioscanSelector);
+        scanIoInit(&drv->slaves[addr].ioscanInit);
     }
     printf("Il driver presenta questi slave ID: ");
     for (int i=0; i <nSlaves;i++)

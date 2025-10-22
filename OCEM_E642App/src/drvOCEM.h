@@ -15,7 +15,9 @@
 #include <asynOctet.h>
 #include <errlog.h>
 #define MAX_SLAVE 32
-
+#define LOGLEVEL 0
+#define errlogPrintf1(...) \
+    do { if (LOGLEVEL >= 1) errlogPrintf(__VA_ARGS__); } while(0)
 typedef struct {
     char name[32];      // es. "STA", "COR", "VOLTAGE"
     char value[64];     // ultimo valore letto
@@ -30,12 +32,17 @@ typedef struct {
     char voltage[40];
     char polarity[40];
     char alarms[40];
+    char selector[40];
+    int  currentPrgH,currentPrgL;
+    int  voltagePrgH,voltagePrgL;
     //IOSCANPVT per notificare record
     IOSCANPVT ioscanStatus;
     IOSCANPVT ioscanCurrent;
     IOSCANPVT ioscanVoltage;
     IOSCANPVT ioscanPolarity;
     IOSCANPVT ioscanAlarms;
+    IOSCANPVT ioscanSelector;
+    IOSCANPVT ioscanInit;
 } OCEM_Slave;
 
 typedef struct {
@@ -53,7 +60,7 @@ typedef struct {
 
 } OCEM_Driver;
 
-
+int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_t responseSize);
 
 
 

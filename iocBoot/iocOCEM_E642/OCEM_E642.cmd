@@ -21,8 +21,8 @@ ocemInit "OCEM_PORT",2,"10,11"
 #asynSetTraceMask("readback_all", 0,8)
 
 # Load database records ## ports name are already define in db
-dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SLAVE10, PORT=OCEM_PORT, ADDR=10")
-dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SLAVE11, PORT=OCEM_PORT, ADDR=11")
+dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SLAVE10, PORT=OCEM_PORT, ADDR=10, IMAX=280,VMAX=40")
+dbLoadRecords("$(TOP)/db/OCEM_E642.db", "P=BTF:MAG:OCEM,R=SLAVE11, PORT=OCEM_PORT, ADDR=11, IMAX=280,VMAX=40")
 #dbLoadRecords("$(TOP)/db/unimag-ocem.db", "P=SPARC:MAG:OCEM,R=PLXDPL01")
 
 iocInit()

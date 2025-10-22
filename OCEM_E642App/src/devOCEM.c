@@ -41,6 +41,7 @@ static long si_init_record(stringinRecord *prec)
 
 /* ---- read record ---- */
 static long si_read(stringinRecord *prec) {
+    int value,rt;
     ocemDpvt *p = (ocemDpvt*) prec->dpvt;
     if (!p || !drv) return -1;
     
@@ -51,11 +52,25 @@ static long si_read(stringinRecord *prec) {
         prec->val[sizeof(prec->val)-1] = '\0';
     }
     else if (strcasecmp(p->var, "COR") == 0) {
-        strncpy(prec->val, slave->current, sizeof(prec->val));
+        rt=sscanf(slave->current,"%d",&value);
+        if (rt == 1) {
+            sprintf(prec->val,"%d",value);
+        }
+        else {
+            errlogPrintf("sscanf failed: rt is %d,string is %s",rt,slave->current);
+            strncpy(prec->val, slave->current, sizeof(prec->val));
+        }
         prec->val[sizeof(prec->val)-1] = '\0';
     }
     else if (strcasecmp(p->var, "TEN") == 0) {
-        strncpy(prec->val, slave->voltage, sizeof(prec->val));
+        rt=sscanf(slave->voltage,"%d",&value);
+        if (rt == 1) {
+            sprintf(prec->val,"%d",value);
+        }
+        else {
+            errlogPrintf("sscanf failed: rt is %d,string is %s",rt,slave->voltage);
+            strncpy(prec->val, slave->voltage, sizeof(prec->val));
+        }
         prec->val[sizeof(prec->val)-1] = '\0';
     }
     else if (strcasecmp(p->var, "POL") == 0) {
@@ -66,6 +81,27 @@ static long si_read(stringinRecord *prec) {
         strncpy(prec->val, slave->alarms, sizeof(prec->val));
         prec->val[sizeof(prec->val)-1] = '\0';
     }
+    else if (strcasecmp(p->var, "SEL") == 0) {
+        strncpy(prec->val, slave->selector, sizeof(prec->val));
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "INI_CURMAX") == 0) {
+        sprintf(prec->val,"%d", slave->currentPrgH);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "INI_CURMIN") == 0) {
+        sprintf(prec->val,"%d", slave->currentPrgH);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "INI_VOLMAX") == 0) {
+        sprintf(prec->val,"%d", slave->voltagePrgH);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "INI_VOLMIN") == 0) {
+        sprintf(prec->val,"%d", slave->voltagePrgH);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+
     // etc...
     return 0;
 }
@@ -88,6 +124,10 @@ static long si_get_ioint_info(int cmd, stringinRecord *prec, IOSCANPVT *ppvt) {
         *ppvt = drv->slaves[p->addr].ioscanPolarity;
      else if (strcasecmp(p->var, "ALL") == 0)
         *ppvt = drv->slaves[p->addr].ioscanAlarms;
+    else if (strcasecmp(p->var, "SEL") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanSelector;
+    else if (strncmp(p->var, "INI",3) == 0)
+        *ppvt = drv->slaves[p->addr].ioscanInit;
 
 
     
@@ -121,7 +161,7 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
     msg[0] = 0x05;        // ENQ
     msg[1] = (unsigned char) (slaveAddress+0x60);
     msgLen = 2;
-    errlogPrintf("Writing ENQ + poll address %x\n",msg[1]);
+    errlogPrintf1("Writing ENQ + poll address %x\n",msg[1]);
     
     status = drv->pasynOctet->write(drv->pasynInterface->drvPvt,drv->pasynUser, (const char*)msg, msgLen, &nbytesOut);
     if (status != asynSuccess) {
@@ -146,8 +186,6 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
         retVal = -1;
     }
     
-    //errlogPrintf("POLL %d :OBTAINED ANSWER: len %ld\n",slave->addr,strlen(response));
-    
     if (retVal <0)
         return retVal;
     
@@ -162,10 +200,19 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
         unsigned char cdc = ocem_calc_cdc((const unsigned char*)msg, cmdLen); 
         msg[3 + cmdLen] = cdc;
         msgLen = 4 + cmdLen;
-        errlogPrintf("Sending command %s\n",msg);
+        errlogPrintf("Sending command %s\n",cmd);
         status = drv->pasynOctet->write(drv->pasynInterface->drvPvt,drv->pasynUser, (const char*)msg, msgLen, &nbytesOut);
-    
-        
+        //NEED TO ADD READ FOR CLEANING
+        memset(response, 0, responseSize);
+        status = drv->pasynOctet->read(drv->pasynInterface->drvPvt,drv->pasynUser, response,responseSize-1,  &nbytesIn, &eomReason);
+        if (status != asynSuccess) 
+        {
+            errlogPrintf1("send_command: nothing to read after command\n");
+        }
+        else
+        {
+            errlogPrintf1("send_command Reply: %s\n",response);
+        }
     }
     
     return retVal;
@@ -173,7 +220,22 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
 }
 
 
+void pad_value(const char *value, char *output)
+{
+    int len = strlen(value);
 
+    if (len >= 7) {
+        // Se è già lunga 7 o più, la copiamo così com’è
+        strncpy(output, value,7);
+    } else {
+        // Calcoliamo quanti zeri servono
+        int zeros = 7 - len;
+        // Scriviamo gli zeri
+        memset(output, '0', zeros);
+        // Copiamo la parte numerica dopo gli zeri
+        strcpy(output + zeros, value);
+    }
+}
 
 
 static long so_init_record(stringoutRecord *prec)
@@ -207,15 +269,81 @@ if (sscanf(prec->out.value.instio.string, "%d %31s", &addr, varname) != 2)
     return 0;
 }
 
+int createCommand(char* outCmd,stringoutRecord *rec )
+{
+    ocemDpvt *p = (ocemDpvt*)rec->dpvt;
+    if (!strcmp(p->var,"SP"))
+    {
+        char formatted[8];
+        errlogPrintf1("Requested to set current. Formatting the value %s\n",rec->val);
+        //sprintf(formatted,"SP %07d",prec->val);
+        pad_value(rec->val,formatted);
+        errlogPrintf1("formatted value is %s\n",formatted);
+        sprintf(outCmd,"SP %s",formatted);
+        errlogPrintf1("command to launch is %s\n",outCmd);
+    }
+    else if (!strcmp(p->var,"ON"))
+        sprintf(outCmd,"ON");
+    else if (!strcmp(p->var,"STB"))
+        sprintf(outCmd,"STB");
+    else if (!strcmp(p->var,"STR"))
+        sprintf(outCmd,"STR");
+    else if (!strcmp(p->var,"RES"))
+        sprintf(outCmd,"RES");
+    else if (!strcmp(p->var,"setPOL"))
+    {
+        //set Polarity can have OPN NEG or POS
+        if ( (!strcmp (rec->val,"OPN")) || (!strcmp (rec->val,"NEG")) || (!strcmp (rec->val,"POS")) )
+            sprintf(outCmd,"%s",rec->val);
+        else 
+        {
+            errlogPrintf("value %s is invalid to set Polarity",rec->val);
+            return -1;
+        }
+    }
+    else if (!strcmp(p->var,"setSTA"))
+    {
+        //set Status can have ON or STB
+        if ( (!strcmp (rec->val,"ON")) || (!strcmp (rec->val,"STB")))
+            sprintf(outCmd,"%s",rec->val);
+        else 
+        {
+            errlogPrintf("value %s is invalid to set Status",rec->val);
+            return -1;
+        }
+    }
+     else if (!strcmp(p->var,"PRG"))
+        sprintf(outCmd,"PRG S");
+    return 0;
+}
 static long so_write(stringoutRecord *prec)
 {
     ocemDpvt *p = (ocemDpvt*)prec->dpvt;
     if (!p || !drv) return -1;
     char response[128];
     size_t responseSize=128;
-    // Qui invii il comando al device
+    char cmdToLaunch[40];
     errlogPrintf("so_write_info: %s %d\n",p->var,p->addr);
+    if (createCommand(cmdToLaunch,prec) != 0)
+    {
+         errlogPrintf("createCommand failed(addr=%d, cmd=%s)\n", p->addr, prec->val);
+         return -1;
+    }
+    
+    /* if (!strcmp(p->var,"SP"))
+    {
+        char formatted[8];
+        errlogPrintf1("Requested to set current. Formatting the value %s\n",prec->val);
+        //sprintf(formatted,"SP %07d",prec->val);
+        pad_value(prec->val,formatted);
+        errlogPrintf1("formatted value is %s\n",formatted);
+        sprintf(prec->val,"SP %s\0",formatted);
+        errlogPrintf1("command to launch is %s\n",prec->val);
+        
+    } */ 
     epicsMutexLock(drv->ioLock);
+    //strcat(prec->val,"\r\n");
+    strcpy(prec->val,cmdToLaunch);
     int status=send_command(drv,p->addr,prec->val,response,responseSize);
     if (status != 0) {
         errlogPrintf("OCEM write failed (addr=%d, cmd=%s)\n", p->addr, prec->val);
