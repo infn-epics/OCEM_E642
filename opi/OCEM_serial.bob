@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--Saved on 2025-10-22 13:43:50 by Alex-->
+<!--Saved on 2025-11-13 12:30:59 by Alex-->
 <display version="2.0.0">
   <name>Display</name>
   <rules>
@@ -87,7 +87,7 @@
   </widget>
   <widget type="textentry" version="3.0.0">
     <name>Text Entry_1</name>
-    <pv_name>$(P):$(R):CURRENT_SP</pv_name>
+    <pv_name>$(P):$(R):SETCURRENT_RAW</pv_name>
     <x>138</x>
     <y>280</y>
     <height>24</height>
@@ -271,5 +271,46 @@ print 'Wrote']]></text>
     <width>80</width>
     <height>50</height>
     <tooltip>$(actions)</tooltip>
+  </widget>
+  <widget type="textentry" version="3.0.0">
+    <name>Text Entry_2</name>
+    <pv_name>$(P):$(R):SETCURRENT</pv_name>
+    <x>138</x>
+    <y>230</y>
+    <height>24</height>
+    <actions>
+      <action type="execute">
+        <script file="EmbeddedPy">
+          <text><![CDATA[# Embedded python script
+from org.csstudio.display.builder.runtime.script import PVUtil, ScriptUtil
+print 'Ciao Ale'
+# widget.setPropertyValue('text', PVUtil.getString(pvs[0]))
+
+pname="loc://ampereToSet"
+pvx = PVUtil.createPV(pname,1000)
+ampere_pv= PVUtil.getDouble(pvx)
+
+
+
+#maxload_pv = PVUtil.getDouble(pvs[1])        # SPARC:OCEM:TEST:MaxIset
+
+# Calcolo: (A / MaxLoad) * 65535
+raw_value = int(round((ampere_pv / 280) * 65535))
+print 'ampere'
+print ampere_pv
+print 'Writing'
+print raw_value 
+PVUtil.writePV("SPARC:OCEM:TEST:Current_SP_raw",raw_value,1000)
+print 'Wrote']]></text>
+        </script>
+        <description>Execute Script</description>
+      </action>
+    </actions>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Label_34</name>
+    <text>Set Current (A)</text>
+    <x>20</x>
+    <y>230</y>
   </widget>
 </display>
