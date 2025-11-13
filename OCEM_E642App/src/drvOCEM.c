@@ -4,7 +4,7 @@
 #include <ctype.h>
 #include <time.h>
 
-double ocemPollingPeriod = 1.0;   // default 1 second
+double ocemPollingPeriod = 0.5;   // default 1 second
 epicsExportAddress(double, ocemPollingPeriod);
 // 777 : x = 65535 : 380 
 

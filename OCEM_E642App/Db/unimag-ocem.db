@@ -10,7 +10,7 @@ record(ao, "$(P):$(R):CURRENT_SP") {
 }
 
 record(calcout, "$(P):$(R):StartRampTrigger") {
-    field(DESC, "Triggers ramp start after CURRENT_SP write")
+    
     field(CALC, "1")
     field(ODLY, "0.5")
     field(OUT, "$(P):$(R):Start_ramp.PROC PP")
