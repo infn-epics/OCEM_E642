@@ -35,6 +35,7 @@ typedef struct {
     char selector[40];
     int  currentPrgH,currentPrgL;
     int  voltagePrgH,voltagePrgL;
+    int  unimagStatus;
     //IOSCANPVT per notificare record
     IOSCANPVT ioscanStatus;
     IOSCANPVT ioscanCurrent;

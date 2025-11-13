@@ -1,86 +1,57 @@
 # =================================================
 # Unimag Interface for OCEM
 # =================================================
-
-# =================================================
-# Aliases for current and voltage
-# =================================================
-
-alias("$(P):$(R):Current","$(P):$(R):CURRENT_RB")
-alias("$(P):$(R):Voltage","$(P):$(R):VOLTAGE_RB")
-
 record(ao, "$(P):$(R):CURRENT_SP") {
-    field(DESC, "User-facing current setpoint")
-    field(VAL, "0")
-    field(OUT, "$(P):$(R):start_current_sequence.PROC")
-}
-record(calcout, "$(P):$(R):start_current_sequence") {
-    field(DESC, "Start ramp if GlobalControl is 4 or 16")
-    field(INPB, "$(P):$(R):GlobalControl")
-    field(CALC, "(B=4)||(B=16)?1:0")
-    field(OOPT, "When Non-zero")
-    field(OUT, "$(P):$(R):set_to_4.PROC PP")
-}
-record(calcout, "$(P):$(R):set_to_4") {
-    field(DESC, "Force GlobalControl to 4")
-    field(CALC, "4")
-    field(OUT, "$(P):$(R):GlobalControl PP")
-    field(FLNK, "$(P):$(R):write_current")
-}
-record(calcout, "$(P):$(R):write_current") {
-    field(DESC, "Write real setpoint")
-    field(INPA, "$(P):$(R):CURRENT_SP.VAL")  # Prende il valore utente
-    field(CALC, "A")
-    field(ODLY, "1.2")
-    field(OUT, "$(P):$(R):Current_SP PP")  # Vero record di output
-    field(FLNK, "$(P):$(R):start_ramp")
-}
-record(calcout, "$(P):$(R):start_ramp") {
-    field(DESC, "Set GlobalControl to 16 (start ramp)")
-    field(CALC, "16")
-    field(ODLY, "1.0")
-    field(OUT, "$(P):$(R):GlobalControl PP")
+    field(DESC, "High-level current setpoint (Ampere)")
+    field(EGU, "A")
+    field(PREC, "3")
+    field(OUT, "$(P):$(R):SETCURRENT.VAL PP")   # scrive il valore su SETCURRENT
+    field(FLNK, "$(P):$(R):StartRampTrigger")   # poi attiva il trigger
 }
 
-
-
-record(event, "$(P):$(R):unimagscan")
-{
-  field(SCAN, "1 second")
-  field(VAL,  "$(P)$(R)unimagscan")
-  field(PINI, "YES")
-
-}
-record(mbbi, "$(P):$(R):STATE_RB") {
-    field(DESC, "State readback")
-    field(SCAN,"Passive")
-    field(ZRVL, "0")
-    field(ZRST, "OFF")
-    field(ONVL, "1")
-    field(ONST, "ON")
-    field(TWVL, "2")
-    field(TWST, "STANDBY")
-    field(THVL, "3")
-    field(THST, "RESET")
-    field(FRVL, "4")
-    field(FRST, "INTERLOCK")
-    field(FRSV, "MAJOR") 
-    field(FVVL, "5")
-    field(FVST, "ERROR")
-    field(FVSV, "MAJOR")
-}
-
-# State calculation (same logic as unimag.db)
-record(calcout, "$(P):$(R):state_calc") {
-    field(DESC, "Calculate state from status bits")
-    field(SCAN,"1 second")
-    field(INPA, "$(P):$(R):Operational")
-    field(INPB, "$(P):$(R):Fault")
-    field(INPC, "$(P):$(R):StandBy")
-    field(CALC, "B=1 ? 5 : (A=0 ? (C=1 ? 2 : 0) : 1)")
-    field(OUT, "$(P):$(R):STATE_RB PP")
+record(calcout, "$(P):$(R):StartRampTrigger") {
+    field(DESC, "Triggers ramp start after CURRENT_SP write")
+    field(CALC, "1")
+    field(ODLY, "0.5")
+    field(OUT, "$(P):$(R):Start_ramp.PROC PP")
     field(OOPT, "Every Time")
 }
+# record(calcout, "$(P):$(R):start_current_sequence") {
+#     field(DESC, "Start ramp if GlobalControl is 4 or 16")
+#     field(INPB, "$(P):$(R):GlobalControl")
+#     field(CALC, "(B=4)||(B=16)?1:0")
+#     field(OOPT, "When Non-zero")
+#     field(OUT, "$(P):$(R):set_to_4.PROC PP")
+# }
+# record(calcout, "$(P):$(R):set_to_4") {
+#     field(DESC, "Force GlobalControl to 4")
+#     field(CALC, "4")
+#     field(OUT, "$(P):$(R):GlobalControl PP")
+#     field(FLNK, "$(P):$(R):write_current")
+# }
+# record(calcout, "$(P):$(R):write_current") {
+#     field(DESC, "Write real setpoint")
+#     field(INPA, "$(P):$(R):CURRENT_SP.VAL")  # Prende il valore utente
+#     field(CALC, "A")
+#     field(ODLY, "1.2")
+#     field(OUT, "$(P):$(R):Current_SP PP")  # Vero record di output
+#     field(FLNK, "$(P):$(R):start_ramp")
+# }
+# record(calcout, "$(P):$(R):start_ramp") {
+#     field(DESC, "Set GlobalControl to 16 (start ramp)")
+#     field(CALC, "16")
+#     field(ODLY, "1.0")
+#     field(OUT, "$(P):$(R):GlobalControl PP")
+# }
+
+
+# record(event, "$(P):$(R):unimagscan")
+# {
+#   field(SCAN, "1 second")
+#   field(VAL,  "$(P)$(R)unimagscan")
+#   field(PINI, "YES")
+
+# }
 
 ## State setpoint
 record(mbbo, "$(P):$(R):STATE_SP") {
@@ -97,13 +68,47 @@ record(mbbo, "$(P):$(R):STATE_SP") {
     field(FRST, "INTERLOCK")
     field(FVVL, "5")
     field(FVST, "ERROR")
-    field(FLNK, "$(P):$(R):state_to_enable")
+    field(FLNK, "$(P):$(R):state_router")
 }
 
-record(calcout, "$(P):$(R):state_to_enable") {
-    field(DESC, "Map state to Enable")
+record(calcout, "$(P):$(R):state_router") {
+    field(DESC, "Esegue comando ON se scelto")
     field(INPA, "$(P):$(R):STATE_SP")
-    field(CALC, "A=1?4:(A=3?8:2)")
-    field(OUT, "$(P):$(R):GlobalControl PP")
-    field(OOPT, "Every Time")
+    field(CALC, "A=1")                  # true se stato=ON
+    field(OCAL, "1")
+    field(OOPT, "When Non-zero")
+    # puoi scegliere se usare STATUS_SP o SetON
+    field(OUT,  "$(P):$(R):SetON.PROC PP")
+    field(FLNK, "$(P):$(R):state_router1")
 }
+
+
+# Se STANDBY (2) → processa SetSTANDBY
+record(calcout, "$(P):$(R):state_router1") {
+    field(DESC, "Esegue comando STB se scelto")
+    field(INPA, "$(P):$(R):STATE_SP")
+    field(CALC, "A=2")
+    field(OOPT, "When Non-zero")
+    field(OUT,  "$(P):$(R):SetSTANDBY.PROC PP")
+    field(FLNK, "$(P):$(R):state_router2")
+}
+
+# Se RESET (3) → processa RESET_ALARMS
+record(calcout, "$(P):$(R):state_router2") {
+    field(DESC, "Esegue comando RST se scelto")
+    field(INPA, "$(P):$(R):STATE_SP")
+    field(CALC, "A=3")
+    field(OOPT, "When Non-zero")
+    field(OUT,  "$(P):$(R):RESET_ALARMS.PROC PP")
+   
+}
+
+
+
+# record(calcout, "$(P):$(R):state_to_enable") {
+#     field(DESC, "Map state to Enable")
+#     field(INPA, "$(P):$(R):STATE_SP")
+#     field(CALC, "A=1?4:(A=3?8:2)")
+#     field(OUT, "$(P):$(R):GlobalControl PP")
+#     field(OOPT, "Every Time")
+# }

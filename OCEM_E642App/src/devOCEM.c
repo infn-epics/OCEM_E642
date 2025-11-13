@@ -101,6 +101,10 @@ static long si_read(stringinRecord *prec) {
         sprintf(prec->val,"%d", slave->voltagePrgH);
         prec->val[sizeof(prec->val)-1] = '\0';
     }
+    else if (strcasecmp(p->var, "UNIMAG") == 0) {
+        sprintf(prec->val,"%d", slave->unimagStatus);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
 
     // etc...
     return 0;
@@ -115,6 +119,8 @@ static long si_get_ioint_info(int cmd, stringinRecord *prec, IOSCANPVT *ppvt) {
     //OCEM_Slave *slave = &drv->slaves[p->addr];
     errlogPrintf("si_get_ioint_info: %s %d\n",p->var,p->addr);
     if (strcasecmp(p->var, "STA") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanStatus;
+    else if (strcasecmp(p->var, "UNIMAG") == 0)
         *ppvt = drv->slaves[p->addr].ioscanStatus;
     else if (strcasecmp(p->var, "COR") == 0)
         *ppvt = drv->slaves[p->addr].ioscanCurrent;

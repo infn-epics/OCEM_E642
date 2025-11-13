@@ -63,6 +63,12 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
     {
         strncpy(slave->status, val, sizeof(slave->status));
         slave->status[sizeof(slave->status)-1] = '\0';
+        if (strcmp(val, "ATT") == 0)
+            slave->unimagStatus = 1;
+        else if (strcmp(val, "STB") == 0)
+            slave->unimagStatus = 2;
+        else
+            slave->unimagStatus = 5;
         scanIoRequest(slave->ioscanStatus);
     }
     else if (strcmp(cmd, "COR") == 0) {
