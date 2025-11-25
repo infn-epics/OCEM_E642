@@ -1,58 +1,8 @@
 # =================================================
 # Unimag Interface for OCEM
 # =================================================
-record(ao, "$(P):$(R):CURRENT_SP") {
-    field(DESC, "High-level current setpoint (Ampere)")
-    field(EGU, "A")
-    field(PREC, "3")
-    field(OUT, "$(P):$(R):SETCURRENT.VAL PP")   # scrive il valore su SETCURRENT
-    field(FLNK, "$(P):$(R):StartRampTrigger")   # poi attiva il trigger
-}
 
-record(calcout, "$(P):$(R):StartRampTrigger") {
-    
-    field(CALC, "1")
-    field(ODLY, "0.5")
-    field(OUT, "$(P):$(R):Start_ramp.PROC PP")
-    field(OOPT, "Every Time")
-}
-# record(calcout, "$(P):$(R):start_current_sequence") {
-#     field(DESC, "Start ramp if GlobalControl is 4 or 16")
-#     field(INPB, "$(P):$(R):GlobalControl")
-#     field(CALC, "(B=4)||(B=16)?1:0")
-#     field(OOPT, "When Non-zero")
-#     field(OUT, "$(P):$(R):set_to_4.PROC PP")
-# }
-# record(calcout, "$(P):$(R):set_to_4") {
-#     field(DESC, "Force GlobalControl to 4")
-#     field(CALC, "4")
-#     field(OUT, "$(P):$(R):GlobalControl PP")
-#     field(FLNK, "$(P):$(R):write_current")
-# }
-# record(calcout, "$(P):$(R):write_current") {
-#     field(DESC, "Write real setpoint")
-#     field(INPA, "$(P):$(R):CURRENT_SP.VAL")  # Prende il valore utente
-#     field(CALC, "A")
-#     field(ODLY, "1.2")
-#     field(OUT, "$(P):$(R):Current_SP PP")  # Vero record di output
-#     field(FLNK, "$(P):$(R):start_ramp")
-# }
-# record(calcout, "$(P):$(R):start_ramp") {
-#     field(DESC, "Set GlobalControl to 16 (start ramp)")
-#     field(CALC, "16")
-#     field(ODLY, "1.0")
-#     field(OUT, "$(P):$(R):GlobalControl PP")
-# }
-
-
-# record(event, "$(P):$(R):unimagscan")
-# {
-#   field(SCAN, "1 second")
-#   field(VAL,  "$(P)$(R)unimagscan")
-#   field(PINI, "YES")
-
-# }
-
+alias("$(P):$(R):SET_COMPLETE_CURRENT","$(P):$(R):CURRENT_SP")
 ## State setpoint
 record(mbbo, "$(P):$(R):STATE_SP") {
     field(DESC, "State setpoint")
@@ -103,12 +53,3 @@ record(calcout, "$(P):$(R):state_router2") {
    
 }
 
-
-
-# record(calcout, "$(P):$(R):state_to_enable") {
-#     field(DESC, "Map state to Enable")
-#     field(INPA, "$(P):$(R):STATE_SP")
-#     field(CALC, "A=1?4:(A=3?8:2)")
-#     field(OUT, "$(P):$(R):GlobalControl PP")
-#     field(OOPT, "Every Time")
-# }

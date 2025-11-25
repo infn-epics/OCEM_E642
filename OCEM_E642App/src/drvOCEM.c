@@ -3,7 +3,7 @@
 #include "drvOCEM.h"
 #include <ctype.h>
 #include <time.h>
-
+extern ocemDpvt *ocem_records[MAX_OCEM_RECORDS];
 double ocemPollingPeriod = 0.5;   // default 1 second
 epicsExportAddress(double, ocemPollingPeriod);
 // 777 : x = 65535 : 380 
@@ -63,12 +63,18 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
     {
         strncpy(slave->status, val, sizeof(slave->status));
         slave->status[sizeof(slave->status)-1] = '\0';
+
         if (strcmp(val, "ATT") == 0)
             slave->unimagStatus = 1;
         else if (strcmp(val, "STB") == 0)
             slave->unimagStatus = 2;
         else
             slave->unimagStatus = 5;
+
+        if (strncmp(slave->alarms,"NO",2))
+        {
+            slave->unimagStatus = 4;
+        }
         scanIoRequest(slave->ioscanStatus);
     }
     else if (strcmp(cmd, "COR") == 0) {
@@ -87,6 +93,9 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         
         strncpy(slave->polarity, val, sizeof(slave->polarity));
         slave->polarity[sizeof(slave->polarity)-1] = '\0';
+        if (strcasecmp(val,"NEG") == 0) slave->integerPolarity =-1;
+        else if (strcasecmp(val,"POS") == 0) slave->integerPolarity =1;
+        else if (strcasecmp(val,"OPN") == 0) slave->integerPolarity =0;
         scanIoRequest(slave->ioscanPolarity);
     }
     else if (strcmp(cmd, "ALL") == 0) 
@@ -95,6 +104,7 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         strncpy(slave->alarms, val, sizeof(slave->alarms));
         slave->alarms[sizeof(slave->alarms)-1] = '\0';
         scanIoRequest(slave->ioscanAlarms);
+        
     }
     else if (strcmp(cmd, "SEL") == 0) 
     {
@@ -425,20 +435,183 @@ int poll_request(OCEM_Driver* drv,OCEM_Slave* slave,char*response,size_t respons
     return retVal;
 
 }
+double bitInAmpere(int bits,OCEM_Slave *slave)
+{
+   
+    return (bits * slave->IMAX)/ slave->currentPrgH;
+
+}
+
+int ampereInBits(double ampere,OCEM_Slave *slave)
+{
+   //A= (b*IMAX)/currh 
+   ampere=fabs(ampere);
+   return (int) ((slave->currentPrgH * ampere )/ slave->IMAX);
+
+}
+
+void checkCurrentSetStatus(OCEM_Slave* slave)
+{
+    char response[128];
+    size_t responseSize=128;
+    if (slave->IMAX <= 0)
+    {
+        for (int i = 0; i < MAX_OCEM_RECORDS; i++)
+        {
+            ocemDpvt *p = ocem_records[i];
+            if (!p) continue;
+
+            if (p->linkedAddr)
+            {
+            double value = 0;
+                long status=0;
+                long options = 0;
+                long nreq = 1;
+
+                status = dbGetField(p->linkedAddr, DBR_DOUBLE, &value,&options,&nreq,NULL);
+                
+                if (status == 0)
+                {
+                    
+                    slave->IMAX=value;
+                    printf( "IMAX :%f for address %d\n",slave->IMAX, slave->addr);
+                    
+                }
+
+            }
+        }
+    }
+    switch(slave->Ostate)
+    {
+
+        case STATE_IDLE:
+            break;
+
+        case STATE_REQ_SET_CURRENT:
+            if (slave->currentPrgH == 0)
+            {
+                errlogPrintf("Richiesta di set di movimentazione corrente Ignorata: Non conosco ancora il fattore di scala\n");
+                slave->Ostate = STATE_IDLE;
+            }
+            if (!strcmp(slave->status,"STB"))
+            {
+                // non fare nulla, richiesta ignorata
+                errlogPrintf("Richiesta di set di movimentazione corrente, in stato STB\nIgnorata\n");
+                slave->Ostate = STATE_IDLE;
+            }
+            else if (slave->integerPolarity != slave->requestedPolarity) {
+                printf("serve cambio polarità\n");
+                send_command(drv,slave->addr,"SP 0000000",response,responseSize);
+                epicsThreadSleep(0.1);
+                send_command(drv,slave->addr,"STR",response,responseSize);
+                slave->Ostate = STATE_WAIT_ZERO;
+            } else {
+                // stessa polarità → vai diretto
+                printf("Non serve cambio polarità\n");
+                
+                
+                //send_command("GO");
+                slave->Ostate = STATE_SET_ON;
+            }
+            break;
+
+        case STATE_WAIT_ZERO:
+            int curVal;
+            sscanf(slave->current,"%d",&curVal);
+            double actualCurrent=bitInAmpere(curVal,slave);
+
+            
+            if (actualCurrent < 5.0) 
+            {
+                //send_command("STB");
+                printf("Abbassata corrente, metto in STB\n");
+                send_command(drv,slave->addr,"STB",response,responseSize);
+                slave->Ostate = STATE_SET_STANDBY;
+            }
+            break;
+
+        case STATE_SET_STANDBY:
+            if (!strcmp(slave->status,"STB"))
+            {
+                printf("Switching polarity\n");
+                char* cmd=slave->requestedPolarity > 0 ? "POS" : "NEG";
+                send_command(drv,slave->addr,cmd,response,responseSize);
+                slave->Ostate = STATE_SET_POLARITY;
+            }
+            break;
+
+        case STATE_SET_POLARITY:
+            if (slave->integerPolarity == slave->requestedPolarity) 
+            {
+                printf("Sending Operational Again\n");
+                send_command(drv,slave->addr,"ON",response,responseSize);
+                //send_command("SETI %f", fabs(slave->requestedCurrent));
+                slave->Ostate = STATE_SET_ON;
+            }
+            break;
+        case STATE_SET_ON:
+        {
+            if (!strcmp(slave->status,"ATT"))
+            {
+                
+                int curBits=ampereInBits(slave->requestedCurrent,slave);
+                char bitStr[7],outStr[7],cmd[11];
+                snprintf(bitStr,sizeof(bitStr),"%d",curBits);
+                pad_value(bitStr,outStr);
+                snprintf(cmd,sizeof(cmd),"SP %s",outStr);
+                printf("Sending Command %s\n",cmd);
+                send_command(drv,slave->addr,cmd,response,responseSize);
+                slave->Ostate = STATE_SET_NEW_CURRENT;
+            }
+            break;
+
+        }
+        case STATE_SET_NEW_CURRENT:
+            // appena SETI è accettato
+            //send_command("GO");
+            printf("Sending Start Ramp\n");
+            send_command(drv,slave->addr,"STR",response,responseSize);
+            slave->Ostate = STATE_RAMP_TO_TARGET;
+            break;
+
+        case STATE_RAMP_TO_TARGET:
+            //Non necessario.. per ora.
+            //printf("Checking current set achieved\n");
+            //if (fabs(slave->currentRB - fabs(slave->requestedCurrent)) < threshold) {
+                slave->Ostate = STATE_IDLE;
+            //}
+            break; 
+
+        
+    }
+
+
+
+
+}
 
 /* --- Thread di polling --- */
 static void ocem_polling(void *arg) {
     
     char response[128];
     size_t responseSize=128;
+    epicsThreadSleep(0.1);
     for (int i=0; i < drv->nSlaves;i++)
     {
+        printf("Aggiungere RMT\n");
+        send_command(drv,drv->addrList[i],"RMT",response,responseSize);
+        epicsThreadSleep(0.1);
         send_command(drv,drv->addrList[i],"PRG S",response,responseSize);
     }
     while(drv->running) 
     {
         for (int i=0; i < drv->nSlaves;i++)
         {
+            checkCurrentSetStatus(&drv->slaves[drv->addrList[i]]);
+
+
+
+
             //errlogPrintf("polling request on address %d\n",drv->addrList[i]);
             epicsMutexLock(drv->ioLock);
             int ret=poll_request(drv,&drv->slaves[drv->addrList[i]],response,responseSize);
@@ -490,6 +663,8 @@ static void ocem_init(const char *port, int nSlaves, const char *addrListStr) {
 
         drv->addrList[i] = addr;
         drv->slaves[addr].addr = addr;
+        drv->slaves[addr].IMAX = -1;
+        drv->slaves[addr].currentPrgH=0;
         
         
         scanIoInit(&drv->slaves[addr].ioscanStatus);

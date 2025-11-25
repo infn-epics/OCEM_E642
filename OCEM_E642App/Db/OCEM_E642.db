@@ -47,7 +47,8 @@ record(calc, "$(P):$(R):CURRENT_RB") {
     field(INPA, "$(P):$(R):CurrentNum NPP NMS")     # valore numerico grezzo
     field(INPB, "$(P):$(R):IMAX NPP NMS")           # valore massimo
     field(INPC, "$(P):$(R):CURRENT_PRG_MAX NPP NMS")    # fattore di scala
-    field(CALC, "(A*B)/C")                      # esempio formula
+    field(INPD, "$(P):$(R):IntPolarity NPP NMS")
+    field(CALC, "((A*B)/C)*D")                      # esempio formula
     field(PREC, "4")                                # 4 decimali di precisione
     field(SCAN, "Passive")                         # si aggiorna automaticamente
     field(EGU,  "A")                                # unità di misura
@@ -60,7 +61,7 @@ record(calc, "$(P):$(R):VOLTAGE_RB") {
     field(CALC, "(A*B)/C")                      # esempio formula
     field(PREC, "4")                                # 4 decimali di precisione
     field(SCAN, "Passive")                         # si aggiorna automaticamente
-    field(EGU,  "A")                                # unità di misura
+    field(EGU,  "V")                                # unità di misura
 }
 
 
@@ -92,7 +93,19 @@ record(stringin, "$(P):$(R):Polarity") {
     field(DTYP, "OCEME642")
     field(INP,  "@$(ADDR) POL")
     field(SCAN, "I/O Intr")
+    
 }
+record(stringin, "$(P):$(R):IntPolarity") {
+    field(DESC, "Legge la polarità")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) INTPOLA")
+    field(SCAN, "I/O Intr")
+    
+}
+
+
+
+
 record(stringin, "$(P):$(R):Alarms") {
     field(DESC, "Legge gli allarmi")
     field(DTYP, "OCEME642")
@@ -232,4 +245,19 @@ record(stringout, "$(P):$(R):PROGRAMDATA_RB") {
     field(DTYP, "OCEME642")
     field(OUT,  "@$(ADDR) PRG")    # indirizzo + eventuale parametro
     field(VAL,  "PRG S")        # valore di default
+}
+
+record(stringout, "$(P):$(R):SET_COMPLETE_CURRENT") {
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) SETI")
+    field(FLNK, "$(P):$(R):IMAX")
+    
+}
+
+
+
+record(stringout, "$(P):$(R):setRMT") {
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) RMT")    # indirizzo + eventuale parametro
+    field(VAL,  "RMT")        # valore di default
 }

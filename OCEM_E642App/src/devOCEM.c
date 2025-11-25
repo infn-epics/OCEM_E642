@@ -1,4 +1,4 @@
-#include <dbAccess.h>
+
 #include <recGbl.h>
 #include <devSup.h>
 #include <stringinRecord.h>
@@ -6,11 +6,15 @@
 
 #include "drvOCEM.h"
 
-typedef struct {
-    int addr;        // slave address (0..31)
-    char var[32];    // "STATUS", "CURRENT", "VOLTAGE", ...
-    //struct OCEM_Var *varRef; // puntatore diretto alla variabile nello slave da usare in caso di generalizzazione.
-} ocemDpvt;
+#ifndef OCEM_RECORDS_VAR
+#define  OCEM_RECORDS_VAR
+ocemDpvt *ocem_records[MAX_OCEM_RECORDS];
+int ocem_record_count = 0;
+#endif
+
+
+
+
 
 OCEM_Driver *drv = NULL;   
 extern unsigned char ocem_calc_cdc(const unsigned char *buf, size_t cmdLen);
@@ -76,6 +80,10 @@ static long si_read(stringinRecord *prec) {
     else if (strcasecmp(p->var, "POL") == 0) {
         strncpy(prec->val, slave->polarity, sizeof(prec->val));
         prec->val[sizeof(prec->val)-1] = '\0';
+        if (strcasecmp(slave->polarity,"NEG") == 0) slave->integerPolarity =-1;
+        else if (strcasecmp(slave->polarity,"POS") == 0) slave->integerPolarity =1;
+        else if (strcasecmp(slave->polarity,"OPN") == 0) slave->integerPolarity =0;
+       
     }
     else if (strcasecmp(p->var, "ALL") == 0) {
         strncpy(prec->val, slave->alarms, sizeof(prec->val));
@@ -105,6 +113,10 @@ static long si_read(stringinRecord *prec) {
         sprintf(prec->val,"%d", slave->unimagStatus);
         prec->val[sizeof(prec->val)-1] = '\0';
     }
+     else if (strcasecmp(p->var, "INTPOLA") == 0) {
+        sprintf(prec->val,"%d", slave->integerPolarity);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
 
     // etc...
     return 0;
@@ -127,6 +139,8 @@ static long si_get_ioint_info(int cmd, stringinRecord *prec, IOSCANPVT *ppvt) {
     else if (strcasecmp(p->var, "TEN") == 0)
         *ppvt = drv->slaves[p->addr].ioscanVoltage;
     else if (strcasecmp(p->var, "POL") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanPolarity;
+    else if (strcasecmp(p->var, "INTPOLA") == 0)
         *ppvt = drv->slaves[p->addr].ioscanPolarity;
      else if (strcasecmp(p->var, "ALL") == 0)
         *ppvt = drv->slaves[p->addr].ioscanAlarms;
@@ -253,7 +267,7 @@ static long so_init_record(stringoutRecord *prec)
 
 
 
-if (sscanf(prec->out.value.instio.string, "%d %31s", &addr, varname) != 2) 
+    if (sscanf(prec->out.value.instio.string, "%d %31s", &addr, varname) != 2) 
     {
         errlogPrintf("Bad INP '%s' in record %s\n",
         prec->out.value.instio.string, prec->name);
@@ -269,9 +283,33 @@ if (sscanf(prec->out.value.instio.string, "%d %31s", &addr, varname) != 2)
 
     //p->addr = parseAddrFromLink(prec->out.value.instio.string);
     strncpy(pvt->var, varname, sizeof(pvt->var));
-    prec->dpvt = pvt;
-  
+    pvt->var[sizeof(pvt->var)-1] = '\0'; 
+    
+    
+    if (prec->flnk.type == DB_LINK) {
+    /* ottieni dbAddr dal link */
+    struct dbAddr addr ;
+    
+    if (dbNameToAddr(prec->flnk.value.pv_link.pvname, &addr) == 0) {
+        pvt->linkedAddr = &addr;
+        pvt->linkedRec  = addr.precord;
+        }
+    }
+    pvt->linkedAddr = calloc(1, sizeof(struct dbAddr));
+    if (dbNameToAddr(prec->flnk.value.pv_link.pvname, pvt->linkedAddr) != 0) 
+    {
+        free(pvt->linkedAddr);
+        pvt->linkedAddr = NULL;
+    }
+    pvt->linkedRec = pvt->linkedAddr ? pvt->linkedAddr->precord : NULL;
 
+    for (int i = 0; i < MAX_OCEM_RECORDS; i++) {
+    if (ocem_records[i] == NULL) {
+        ocem_records[i] = pvt;
+        break;
+        }
+    }
+    prec->dpvt = pvt;
     return 0;
 }
 
@@ -296,6 +334,8 @@ int createCommand(char* outCmd,stringoutRecord *rec )
         sprintf(outCmd,"STR");
     else if (!strcmp(p->var,"RES"))
         sprintf(outCmd,"RES");
+    else if (!strcmp(p->var,"RMT"))
+        sprintf(outCmd,"RMT");
     else if (!strcmp(p->var,"setPOL"))
     {
         //set Polarity can have OPN NEG or POS
@@ -336,17 +376,17 @@ static long so_write(stringoutRecord *prec)
          return -1;
     }
     
-    /* if (!strcmp(p->var,"SP"))
+    if (!strcmp(p->var,"SETI"))
     {
-        char formatted[8];
-        errlogPrintf1("Requested to set current. Formatting the value %s\n",prec->val);
-        //sprintf(formatted,"SP %07d",prec->val);
-        pad_value(prec->val,formatted);
-        errlogPrintf1("formatted value is %s\n",formatted);
-        sprintf(prec->val,"SP %s\0",formatted);
-        errlogPrintf1("command to launch is %s\n",prec->val);
-        
-    } */ 
+        OCEM_Slave* slave=findSlave(drv,p->addr);
+        double newValue = atof(prec->val);
+        epicsMutexLock(drv->ioLock);
+        slave->requestedCurrent = newValue;
+        slave->requestedPolarity = (newValue >= 0) ? +1 : -1;
+        slave->Ostate = STATE_REQ_SET_CURRENT;
+        epicsMutexUnlock(drv->ioLock);
+        return 0;
+    } 
     epicsMutexLock(drv->ioLock);
     //strcat(prec->val,"\r\n");
     strcpy(prec->val,cmdToLaunch);
