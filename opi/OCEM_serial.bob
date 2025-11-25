@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--Saved on 2025-11-13 12:30:59 by Alex-->
+<!--Saved on 2025-11-25 17:57:22 by Alex-->
 <display version="2.0.0">
   <name>Display</name>
   <rules>
@@ -17,27 +17,27 @@
     <name>Text Update</name>
     <pv_name>$(P):$(R):CurrentStr</pv_name>
     <x>138</x>
-    <y>76</y>
+    <y>126</y>
   </widget>
   <widget type="label" version="2.0.0">
     <name>Label</name>
     <text>Current_raw</text>
     <x>20</x>
-    <y>76</y>
+    <y>126</y>
     <width>90</width>
   </widget>
   <widget type="label" version="2.0.0">
     <name>Label_1</name>
     <text>Voltage_raw</text>
     <x>20</x>
-    <y>106</y>
+    <y>156</y>
     <width>80</width>
   </widget>
   <widget type="textupdate" version="2.0.0">
     <name>Text Update_1</name>
     <pv_name>$(P):$(R):VoltageStr</pv_name>
     <x>138</x>
-    <y>106</y>
+    <y>156</y>
   </widget>
   <widget type="label" version="2.0.0">
     <name>Label_2</name>
@@ -85,41 +85,6 @@
     <y>60</y>
     <tooltip>$(actions)</tooltip>
   </widget>
-  <widget type="textentry" version="3.0.0">
-    <name>Text Entry_1</name>
-    <pv_name>$(P):$(R):SETCURRENT_RAW</pv_name>
-    <x>138</x>
-    <y>280</y>
-    <height>24</height>
-    <actions>
-      <action type="execute">
-        <script file="EmbeddedPy">
-          <text><![CDATA[# Embedded python script
-from org.csstudio.display.builder.runtime.script import PVUtil, ScriptUtil
-print 'Ciao Ale'
-# widget.setPropertyValue('text', PVUtil.getString(pvs[0]))
-
-pname="loc://ampereToSet"
-pvx = PVUtil.createPV(pname,1000)
-ampere_pv= PVUtil.getDouble(pvx)
-
-
-
-#maxload_pv = PVUtil.getDouble(pvs[1])        # SPARC:OCEM:TEST:MaxIset
-
-# Calcolo: (A / MaxLoad) * 65535
-raw_value = int(round((ampere_pv / 280) * 65535))
-print 'ampere'
-print ampere_pv
-print 'Writing'
-print raw_value 
-PVUtil.writePV("SPARC:OCEM:TEST:Current_SP_raw",raw_value,1000)
-print 'Wrote']]></text>
-        </script>
-        <description>Execute Script</description>
-      </action>
-    </actions>
-  </widget>
   <widget type="action_button" version="3.0.0">
     <name>Action Button_5</name>
     <actions execute_as_one="true">
@@ -132,12 +97,6 @@ print 'Wrote']]></text>
     <x>540</x>
     <y>100</y>
     <tooltip>$(actions)</tooltip>
-  </widget>
-  <widget type="label" version="2.0.0">
-    <name>Label_33</name>
-    <text>Set Current raw</text>
-    <x>20</x>
-    <y>280</y>
   </widget>
   <widget type="textupdate" version="2.0.0">
     <name>Text Update_2</name>
@@ -158,8 +117,8 @@ print 'Wrote']]></text>
   <widget type="choice" version="2.0.0">
     <name>Choice Button</name>
     <pv_name>$(P):$(R):SetPolarity</pv_name>
-    <x>100</x>
-    <y>430</y>
+    <x>155</x>
+    <y>220</y>
     <width>160</width>
     <items>
       <item>POS</item>
@@ -209,14 +168,14 @@ print 'Wrote']]></text>
     <name>Label_4</name>
     <text>Current</text>
     <x>20</x>
-    <y>150</y>
+    <y>50</y>
     <width>90</width>
   </widget>
   <widget type="textupdate" version="2.0.0">
     <name>Text Update_3</name>
     <pv_name>$(P):$(R):CURRENT_RB</pv_name>
     <x>138</x>
-    <y>150</y>
+    <y>50</y>
   </widget>
   <widget type="label" version="2.0.0">
     <name>Label_6</name>
@@ -247,14 +206,14 @@ print 'Wrote']]></text>
     <name>Label_7</name>
     <text>Voltage</text>
     <x>20</x>
-    <y>180</y>
+    <y>80</y>
     <width>80</width>
   </widget>
   <widget type="textupdate" version="2.0.0">
     <name>Text Update_8</name>
     <pv_name>$(P):$(R):VOLTAGE_RB</pv_name>
     <x>138</x>
-    <y>180</y>
+    <y>80</y>
   </widget>
   <widget type="action_button" version="3.0.0">
     <name>Action Button</name>
@@ -266,17 +225,16 @@ print 'Wrote']]></text>
       </action>
     </actions>
     <text>RESET ALARMS</text>
-    <x>100</x>
-    <y>360</y>
-    <width>80</width>
+    <x>540</x>
+    <y>140</y>
     <height>50</height>
     <tooltip>$(actions)</tooltip>
   </widget>
   <widget type="textentry" version="3.0.0">
     <name>Text Entry_2</name>
     <pv_name>$(P):$(R):SETCURRENT</pv_name>
-    <x>138</x>
-    <y>230</y>
+    <x>155</x>
+    <y>277</y>
     <height>24</height>
     <actions>
       <action type="execute">
@@ -311,6 +269,69 @@ print 'Wrote']]></text>
     <name>Label_34</name>
     <text>Set Current (A)</text>
     <x>20</x>
+    <y>277</y>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Label_35</name>
+    <text>Set And go Current</text>
+    <x>20</x>
+    <y>320</y>
+    <width>170</width>
+  </widget>
+  <widget type="textentry" version="3.0.0">
+    <name>Text Entry_3</name>
+    <pv_name>$(P):$(R):SET_COMPLETE_CURRENT</pv_name>
+    <x>155</x>
+    <y>320</y>
+    <width>150</width>
+    <height>24</height>
+    <actions>
+      <action type="execute">
+        <script file="EmbeddedPy">
+          <text><![CDATA[# Embedded python script
+from org.csstudio.display.builder.runtime.script import PVUtil, ScriptUtil
+print 'Ciao Ale'
+# widget.setPropertyValue('text', PVUtil.getString(pvs[0]))
+
+pname="loc://ampereToSet"
+pvx = PVUtil.createPV(pname,1000)
+ampere_pv= PVUtil.getDouble(pvx)
+
+
+
+#maxload_pv = PVUtil.getDouble(pvs[1])        # SPARC:OCEM:TEST:MaxIset
+
+# Calcolo: (A / MaxLoad) * 65535
+raw_value = int(round((ampere_pv / 280) * 65535))
+print 'ampere'
+print ampere_pv
+print 'Writing'
+print raw_value 
+PVUtil.writePV("SPARC:OCEM:TEST:Current_SP_raw",raw_value,1000)
+print 'Wrote']]></text>
+        </script>
+        <description>Execute Script</description>
+      </action>
+    </actions>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Label_36</name>
+    <text>Set Polarity</text>
+    <x>30</x>
     <y>230</y>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>Action Button_6</name>
+    <actions execute_as_one="true">
+      <action type="write_pv">
+        <pv_name>$(P):$(R):setRMT</pv_name>
+        <value>1</value>
+        <description>Send RMT (re-init)</description>
+      </action>
+    </actions>
+    <x>670</x>
+    <y>140</y>
+    <height>50</height>
+    <tooltip>$(actions)</tooltip>
   </widget>
 </display>
