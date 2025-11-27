@@ -41,7 +41,6 @@ typedef struct {
 typedef enum {
     STATE_IDLE,
     STATE_REQ_SET_CURRENT,      // richiesta da utente
-    STATE_RAMP_TO_ZERO,
     STATE_WAIT_ZERO,
     STATE_SET_STANDBY,
     STATE_SET_POLARITY,

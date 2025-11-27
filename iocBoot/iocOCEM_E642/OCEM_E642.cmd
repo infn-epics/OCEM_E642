@@ -1,11 +1,12 @@
-#!../../bin/linux-x86_64/OCEM_E642
+#!../../bin/linux-x86_64/OCEM_E642ioc
 # https://epics-modbus.readthedocs.io/en/latest/overview.htm
 
 < envPaths
 
 ## Register all support components
-dbLoadDatabase "../../dbd/OCEM_E642.dbd"
-OCEM_E642_registerRecordDeviceDriver(pdbbase)
+dbLoadDatabase "../../dbd/OCEM_E642Support.dbd"
+#dbLoadDatabase("../../OCEM_E642App/Db/OCEM_E642Support.dbd")
+OCEM_E642Ioc_registerRecordDeviceDriver(pdbbase)
 
 
 # Configure Serial communication
