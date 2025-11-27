@@ -6,7 +6,9 @@ include $(TOP)/configure/CONFIG
 DIRS += configure
 DIRS += $(wildcard *Sup)
 DIRS += $(wildcard *App)
-DIRS += OCEM_E642ioc 
+ifdef BUILD_IOC
+  DIRS += OCEM_E642Ioc
+endif
 DIRS += $(wildcard *Top)
 DIRS += $(wildcard iocBoot)
 
