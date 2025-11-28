@@ -598,7 +598,7 @@ static void ocem_polling(void *arg) {
     epicsThreadSleep(0.1);
     for (int i=0; i < drv->nSlaves;i++)
     {
-        printf("Aggiungere RMT\n");
+        //printf("Aggiungere RMT\n");
         send_command(drv,drv->addrList[i],"RMT",response,responseSize);
         epicsThreadSleep(0.1);
         send_command(drv,drv->addrList[i],"PRG S",response,responseSize);
