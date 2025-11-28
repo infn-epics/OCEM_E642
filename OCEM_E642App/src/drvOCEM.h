@@ -17,6 +17,8 @@
 #include <iocsh.h>
 #include <asynDriver.h>
 #include <asynOctet.h>
+#include <asynFloat64.h>
+
 #include <errlog.h>
 #define MAX_SLAVE 32
 #define LOGLEVEL 0
@@ -24,11 +26,7 @@
 
 #define errlogPrintf1(...) \
     do { if (LOGLEVEL >= 1) errlogPrintf(__VA_ARGS__); } while(0)
-/* typedef struct {
-    char name[32];      // es. "STA", "COR", "VOLTAGE"
-    char value[64];     // ultimo valore letto
-    IOSCANPVT ioscan;   // canale di interrupt per questa variabile
-} OCEM_Var; */
+
 typedef struct {
     int addr;        // slave address (0..31)
     char var[32];    // "STATUS", "CURRENT", "VOLTAGE", ...
@@ -83,6 +81,8 @@ typedef struct {
     OCEM_Slave slaves[MAX_SLAVE];
     epicsThreadId threadId;
     int running;
+    int pollingPeriodParam;
+    double ocemPollingPeriod;
     asynUser *pasynUser;
     asynInterface *pasynInterface;
     asynOctet *pasynOctet;

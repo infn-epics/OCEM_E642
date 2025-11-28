@@ -375,7 +375,19 @@ static long so_write(stringoutRecord *prec)
          errlogPrintf("createCommand failed(addr=%d, cmd=%s)\n", p->addr, prec->val);
          return -1;
     }
-    
+    if (!strcmp(p->var,"setPollingPeriod"))
+    {
+        printf("setting polling period. Before: %f ",drv->ocemPollingPeriod);
+        float newval;
+        if (sscanf(prec->val,"%f",&newval) == 1)
+        {
+            printf(" After: new val %f\n",newval);
+            drv->ocemPollingPeriod=newval;
+            return 0;
+        }
+        return -1;
+
+    }
     if (!strcmp(p->var,"SETI"))
     {
         OCEM_Slave* slave=findSlave(drv,p->addr);

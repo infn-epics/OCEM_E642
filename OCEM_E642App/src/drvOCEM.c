@@ -4,8 +4,8 @@
 #include <ctype.h>
 #include <time.h>
 extern ocemDpvt *ocem_records[MAX_OCEM_RECORDS];
-double ocemPollingPeriod = 0.5;   // default 1 second
-epicsExportAddress(double, ocemPollingPeriod);
+//double ocemPollingPeriod = 0.5;   // default 1 second
+//epicsExportAddress(double, ocemPollingPeriod);
 // 777 : x = 65535 : 380 
 
  unsigned char ocem_calc_cdc(const unsigned char *buf, size_t cmdLen) {
@@ -340,7 +340,7 @@ int select_request(OCEM_Driver* drv,OCEM_Slave* slave,char*response,size_t respo
     }
     /* 4. Prepara STX + addr + cmd + ETX + CDC */
     char *cmd=getNextCommandForSlave(slave);
-    strncpy(slave->lastSelCommand,cmd,strlen(cmd));
+    strcpy(slave->lastSelCommand,cmd);
     size_t cmdLen = strlen(cmd);
     msg[0] = 0x02; // STX
     msg[1] = (unsigned char) (slave->addr+0x60);
@@ -630,7 +630,7 @@ static void ocem_polling(void *arg) {
             epicsMutexUnlock(drv->ioLock);
 
         }
-        epicsThreadSleep(ocemPollingPeriod); // periodo di polling
+        epicsThreadSleep(drv->ocemPollingPeriod); // periodo di polling
     }
 }
 
@@ -641,9 +641,13 @@ static void ocem_polling(void *arg) {
 /* --- Inizializzazione driver --- */
 static void ocem_init(const char *port, int nSlaves, const char *addrListStr) {
     drv = calloc(1, sizeof(OCEM_Driver));
+    drv->pollingPeriodParam = -1;
+    
+    
     drv->port = strdup(port);
     drv->nSlaves = nSlaves;
     drv->running = 1;
+    drv->ocemPollingPeriod = 0.5;
     int addrList[MAX_SLAVE];
     drv->ioLock = epicsMutexCreate();
     if (!drv->ioLock) {

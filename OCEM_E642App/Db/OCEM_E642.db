@@ -3,15 +3,12 @@ record(stringin, "$(P):$(R):InputAddress") {
 }
 
 
-record(ao, "$(P):PollingPeriod") {
+record(stringout, "$(P):$(R):setPollingPeriod") {
     field(DESC, "Polling period for all chain")
-    field(DTYP, "Soft Channel")
-    field(OUT,  "ocemPollingPeriod PP NMS")
-    field(PREC, "2")
-    field(VAL,  "1.0")
-    field(HOPR, "10.0")
-    field(LOPR, "0.1")
-    field(EGU,  "s")
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) setPollingPeriod")
+    field(VAL,  "0.5")
+   
 }
 
 record(ai, "$(P):$(R):IMAX") {
