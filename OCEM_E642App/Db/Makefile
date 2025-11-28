@@ -5,7 +5,7 @@ include $(TOP)/configure/CONFIG
 DBD += ocemCdc.dbd
 
 DB += OCEM_E642.db 
-DB += unimag-ocem.db 
+DB += unimag-ocemE642.db 
 DB += OCEM_E642.proto
 
 
