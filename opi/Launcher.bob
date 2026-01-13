@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<display version="2.0.0">
+  <name>OCEM Launcher</name>
+  <width>600</width>
+  <height>300</height>
+  <widget type="label" version="2.0.0">
+    <name>Title</name>
+    <text>OCEM Power Supplies Launcher</text>
+    <x>10</x>
+    <y>10</y>
+    <width>580</width>
+    <height>40</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="18.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="0" green="0" blue="128">
+      </color>
+    </foreground_color>
+    <horizontal_alignment>1</horizontal_alignment>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>QUATB102_Serial</name>
+    <actions>
+      <action type="open_display">
+        <description>QUATB102 Serial</description>
+        <file>OCEM_serial.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATB102</R>
+        </macros>
+        <target>window</target>
+      </action>
+    </actions>
+    <text>QUATB102 Serial</text>
+    <x>10</x>
+    <y>60</y>
+    <width>180</width>
+    <height>40</height>
+    <tooltip>$(actions)</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>QUATB102_Unimag</name>
+    <actions>
+      <action type="open_display">
+        <description>QUATB102 Unimag</description>
+        <file>OCEM_unimag.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATB102</R>
+        </macros>
+        <target>window</target>
+      </action>
+    </actions>
+    <text>QUATB102 Unimag</text>
+    <x>200</x>
+    <y>60</y>
+    <width>180</width>
+    <height>40</height>
+    <tooltip>$(actions)</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>QUATM001_Serial</name>
+    <actions>
+      <action type="open_display">
+        <description>QUATM001 Serial</description>
+        <file>OCEM_serial.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATM001</R>
+        </macros>
+        <target>window</target>
+      </action>
+    </actions>
+    <text>QUATM001 Serial</text>
+    <x>10</x>
+    <y>110</y>
+    <width>180</width>
+    <height>40</height>
+    <tooltip>$(actions)</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>QUATM001_Unimag</name>
+    <actions>
+      <action type="open_display">
+        <description>QUATM001 Unimag</description>
+        <file>OCEM_unimag.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATM001</R>
+        </macros>
+        <target>window</target>
+      </action>
+    </actions>
+    <text>QUATM001 Unimag</text>
+    <x>200</x>
+    <y>110</y>
+    <width>180</width>
+    <height>40</height>
+    <tooltip>$(actions)</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>QUATM004_Serial</name>
+    <actions>
+      <action type="open_display">
+        <description>QUATM004 Serial</description>
+        <file>OCEM_serial.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATM004</R>
+        </macros>
+        <target>window</target>
+      </action>
+    </actions>
+    <text>QUATM004 Serial</text>
+    <x>10</x>
+    <y>160</y>
+    <width>180</width>
+    <height>40</height>
+    <tooltip>$(actions)</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>QUATM004_Unimag</name>
+    <actions>
+      <action type="open_display">
+        <description>QUATM004 Unimag</description>
+        <file>OCEM_unimag.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATM004</R>
+        </macros>
+        <target>window</target>
+      </action>
+    </actions>
+    <text>QUATM004 Unimag</text>
+    <x>200</x>
+    <y>160</y>
+    <width>180</width>
+    <height>40</height>
+    <tooltip>$(actions)</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>QUATB101_Serial</name>
+    <actions>
+      <action type="open_display">
+        <description>QUATB101 Serial</description>
+        <file>OCEM_serial.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATB101</R>
+        </macros>
+        <target>window</target>
+      </action>
+    </actions>
+    <text>QUATB101 Serial</text>
+    <x>10</x>
+    <y>210</y>
+    <width>180</width>
+    <height>40</height>
+    <tooltip>$(actions)</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>QUATB101_Unimag</name>
+    <actions>
+      <action type="open_display">
+        <description>QUATB101 Unimag</description>
+        <file>OCEM_unimag.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATB101</R>
+        </macros>
+        <target>window</target>
+      </action>
+    </actions>
+    <text>QUATB101 Unimag</text>
+    <x>200</x>
+    <y>210</y>
+    <width>180</width>
+    <height>40</height>
+    <tooltip>$(actions)</tooltip>
+  </widget>
+</display>

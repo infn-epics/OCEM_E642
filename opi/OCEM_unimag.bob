@@ -1,0 +1,390 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<display version="2.0.0">
+  <name>OCEM PS UNIMAG Interface</name>
+  <width>600</width>
+  <height>700</height>
+  <background_color>
+    <color red="240" green="240" blue="240">
+    </color>
+  </background_color>
+  <widget type="label" version="2.0.0">
+    <name>Title</name>
+    <text>OCEM Power Supply - UNIMAG Interface</text>
+    <x>10</x>
+    <y>10</y>
+    <width>580</width>
+    <height>40</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="18.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="0" green="0" blue="128">
+      </color>
+    </foreground_color>
+    <horizontal_alignment>1</horizontal_alignment>
+  </widget>
+  <widget type="group" version="3.0.0">
+    <name>StatusGroup</name>
+    <x>10</x>
+    <y>60</y>
+    <width>580</width>
+    <height>140</height>
+    <style>3</style>
+    <widget type="label" version="2.0.0">
+      <name>StatusLabel</name>
+      <text>Status</text>
+      <height>25</height>
+      <font>
+        <font family="Liberation Sans" style="BOLD" size="14.0">
+        </font>
+      </font>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>StateLabel</name>
+      <text>State:</text>
+      <x>20</x>
+      <y>35</y>
+      <height>25</height>
+    </widget>
+    <widget type="textupdate" version="2.0.0">
+      <name>StateRB</name>
+      <pv_name>$(P):$(R):Status</pv_name>
+      <x>130</x>
+      <y>35</y>
+      <width>150</width>
+      <height>25</height>
+      <font>
+        <font family="Liberation Sans" style="BOLD" size="14.0">
+        </font>
+      </font>
+      <background_color>
+        <color red="200" green="200" blue="200">
+        </color>
+      </background_color>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>CurrentRBLabel</name>
+      <text>Current:</text>
+      <x>20</x>
+      <y>70</y>
+      <height>25</height>
+    </widget>
+    <widget type="textupdate" version="2.0.0">
+      <name>CurrentRB</name>
+      <pv_name>$(P):$(R):CURRENT_RB</pv_name>
+      <x>130</x>
+      <y>70</y>
+      <width>150</width>
+      <height>25</height>
+      <font>
+        <font family="Liberation Sans" style="BOLD" size="14.0">
+        </font>
+      </font>
+      <background_color>
+        <color red="200" green="200" blue="200">
+        </color>
+      </background_color>
+      <format>1</format>
+      <precision>3</precision>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>InterlockLabel</name>
+      <text>Alarms:</text>
+      <x>20</x>
+      <y>105</y>
+      <height>25</height>
+    </widget>
+    <widget type="textupdate" version="2.0.0">
+      <name>InterlockText</name>
+      <pv_name>$(P):$(R):Alarms</pv_name>
+      <x>130</x>
+      <y>105</y>
+      <width>150</width>
+      <height>25</height>
+      <format>4</format>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>VoltageRBLabel</name>
+      <text>Voltage:</text>
+      <x>320</x>
+      <y>70</y>
+      <height>25</height>
+    </widget>
+    <widget type="textupdate" version="2.0.0">
+      <name>VoltageRB</name>
+      <pv_name>$(P):$(R):VOLTAGE_RB</pv_name>
+      <x>430</x>
+      <y>70</y>
+      <width>120</width>
+      <height>25</height>
+      <format>1</format>
+      <precision>1</precision>
+    </widget>
+  </widget>
+  <widget type="group" version="3.0.0">
+    <name>StateControlGroup</name>
+    <x>10</x>
+    <y>210</y>
+    <width>580</width>
+    <height>120</height>
+    <style>3</style>
+    <widget type="label" version="2.0.0">
+      <name>StateControlLabel</name>
+      <text>State Control</text>
+      <width>150</width>
+      <height>25</height>
+      <font>
+        <font family="Liberation Sans" style="BOLD" size="14.0">
+        </font>
+      </font>
+    </widget>
+    <widget type="action_button" version="3.0.0">
+      <name>StandbyButton</name>
+      <actions>
+        <action type="write_pv">
+          <description>Standby</description>
+          <pv_name>$(P):$(R):STATE_SP</pv_name>
+          <value>2</value>
+        </action>
+      </actions>
+      <text>STANDBY</text>
+      <x>20</x>
+      <y>40</y>
+      <width>120</width>
+      <background_color>
+        <color red="255" green="255" blue="0">
+        </color>
+      </background_color>
+      <tooltip>$(actions)</tooltip>
+    </widget>
+    <widget type="action_button" version="3.0.0">
+      <name>PowerOnButton</name>
+      <actions>
+        <action type="write_pv">
+          <description>Power On</description>
+          <pv_name>$(P):$(R):STATE_SP</pv_name>
+          <value>1</value>
+        </action>
+      </actions>
+      <text>POWER ON</text>
+      <x>150</x>
+      <y>40</y>
+      <width>120</width>
+      <background_color>
+        <color red="0" green="255" blue="0">
+        </color>
+      </background_color>
+      <tooltip>$(actions)</tooltip>
+    </widget>
+    <widget type="action_button" version="3.0.0">
+      <name>OffButton</name>
+      <actions>
+        <action type="write_pv">
+          <description>Off</description>
+          <pv_name>$(P):$(R):STATE_SP</pv_name>
+          <value>0</value>
+        </action>
+      </actions>
+      <text>OFF</text>
+      <x>280</x>
+      <y>40</y>
+      <width>120</width>
+      <background_color>
+        <color red="255" green="150" blue="150">
+        </color>
+      </background_color>
+      <tooltip>$(actions)</tooltip>
+    </widget>
+    <widget type="action_button" version="3.0.0">
+      <name>ResetButton</name>
+      <actions>
+        <action type="write_pv">
+          <description>Reset</description>
+          <pv_name>$(P):$(R):STATE_SP</pv_name>
+          <value>3</value>
+        </action>
+      </actions>
+      <text>RESET</text>
+      <x>410</x>
+      <y>40</y>
+      <width>120</width>
+      <background_color>
+        <color red="255" green="200" blue="0">
+        </color>
+      </background_color>
+      <tooltip>$(actions)</tooltip>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>StateSPLabel</name>
+      <text>Commanded:</text>
+      <x>20</x>
+      <y>80</y>
+      <width>120</width>
+      <height>25</height>
+    </widget>
+    <widget type="textupdate" version="2.0.0">
+      <name>StateSP</name>
+      <pv_name>$(P):$(R):STATE_SP</pv_name>
+      <x>150</x>
+      <y>80</y>
+      <width>120</width>
+      <height>25</height>
+      <format>4</format>
+    </widget>
+  </widget>
+  <widget type="group" version="3.0.0">
+    <name>CurrentControlGroup</name>
+    <x>10</x>
+    <y>340</y>
+    <width>580</width>
+    <height>120</height>
+    <style>3</style>
+    <widget type="label" version="2.0.0">
+      <name>CurrentControlLabel</name>
+      <text>Current Control</text>
+      <width>250</width>
+      <height>25</height>
+      <font>
+        <font family="Liberation Sans" style="BOLD" size="14.0">
+        </font>
+      </font>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>CurrentSPLabel</name>
+      <text>Setpoint:</text>
+      <x>20</x>
+      <y>40</y>
+      <height>25</height>
+    </widget>
+    <widget type="textentry" version="3.0.0">
+      <name>CurrentSP</name>
+      <pv_name>$(P):$(R):CURRENT_SP</pv_name>
+      <x>130</x>
+      <y>40</y>
+      <width>150</width>
+      <height>30</height>
+      <font>
+        <font family="Liberation Sans" style="BOLD" size="14.0">
+        </font>
+      </font>
+      <format>1</format>
+      <precision>3</precision>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>CurrentRangeLabel</name>
+      <text>(-100 to +100 A)</text>
+      <x>290</x>
+      <y>40</y>
+      <width>150</width>
+      <height>25</height>
+      <font>
+        <font family="Liberation Sans" style="ITALIC" size="10.0">
+        </font>
+      </font>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>QuickSetLabel</name>
+      <text>Quick Set:</text>
+      <x>20</x>
+      <y>85</y>
+      <height>25</height>
+    </widget>
+    <widget type="action_button" version="3.0.0">
+      <name>Zero</name>
+      <actions>
+        <action type="write_pv">
+          <description>Zero</description>
+          <pv_name>$(P):$(R):CURRENT_SP</pv_name>
+          <value>0</value>
+        </action>
+      </actions>
+      <text>0 A</text>
+      <x>130</x>
+      <y>85</y>
+      <width>70</width>
+      <height>25</height>
+      <tooltip>$(actions)</tooltip>
+    </widget>
+    <widget type="action_button" version="3.0.0">
+      <name>Plus50</name>
+      <actions>
+        <action type="write_pv">
+          <description>+50A</description>
+          <pv_name>$(P):$(R):CURRENT_SP</pv_name>
+          <value>50</value>
+        </action>
+      </actions>
+      <text>+50 A</text>
+      <x>210</x>
+      <y>85</y>
+      <width>70</width>
+      <height>25</height>
+      <tooltip>$(actions)</tooltip>
+    </widget>
+    <widget type="action_button" version="3.0.0">
+      <name>Minus50</name>
+      <actions>
+        <action type="write_pv">
+          <description>-50A</description>
+          <pv_name>$(P):$(R):CURRENT_SP</pv_name>
+          <value>-50</value>
+        </action>
+      </actions>
+      <text>-50 A</text>
+      <x>290</x>
+      <y>85</y>
+      <width>70</width>
+      <height>25</height>
+      <tooltip>$(actions)</tooltip>
+    </widget>
+    <widget type="action_button" version="3.0.0">
+      <name>Plus100</name>
+      <actions>
+        <action type="write_pv">
+          <description>+100A</description>
+          <pv_name>$(P):$(R):CURRENT_SP</pv_name>
+          <value>100</value>
+        </action>
+      </actions>
+      <text>+100 A</text>
+      <x>370</x>
+      <y>85</y>
+      <width>80</width>
+      <height>25</height>
+      <tooltip>$(actions)</tooltip>
+    </widget>
+    <widget type="action_button" version="3.0.0">
+      <name>Minus100</name>
+      <actions>
+        <action type="write_pv">
+          <description>-100A</description>
+          <pv_name>$(P):$(R):CURRENT_SP</pv_name>
+          <value>-100</value>
+        </action>
+      </actions>
+      <text>-100 A</text>
+      <x>460</x>
+      <y>85</y>
+      <width>80</width>
+      <height>25</height>
+      <tooltip>$(actions)</tooltip>
+    </widget>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>InfoLabel</name>
+    <text>UNIMAG Interface for OCEM Power Supply</text>
+    <x>10</x>
+    <y>480</y>
+    <width>580</width>
+    <height>50</height>
+    <font>
+      <font family="Liberation Sans" style="ITALIC" size="10.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="100" green="100" blue="100">
+      </color>
+    </foreground_color>
+  </widget>
+</display>
