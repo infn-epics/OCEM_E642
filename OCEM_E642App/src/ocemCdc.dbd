@@ -1,0 +1,7 @@
+registrar(drvOCEMRegister)
+device(stringin, INST_IO, devSiOCEM , "OCEME642")
+device(stringout, INST_IO, devSoOCEM, "OCEME642")
+device(ao, INST_IO, devAoOCEM, "OCEME642")
+device(ai, INST_IO, devAiOCEM, "OCEME642")
+device(longin, INST_IO, devLiOCEM, "OCEME642")
+device(longout, INST_IO, devLoOCEM, "OCEME642")

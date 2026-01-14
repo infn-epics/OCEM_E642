@@ -1,0 +1,789 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<display version="2.0.0">
+  <name>BTF OCEM Power Supply Launcher</name>
+  <width>750</width>
+  <height>450</height>
+  <background_color>
+    <color red="235" green="235" blue="235">
+    </color>
+  </background_color>
+  
+  <!-- Header -->
+  <widget type="rectangle" version="2.0.0">
+    <name>Header</name>
+    <x>0</x>
+    <y>0</y>
+    <width>750</width>
+    <height>70</height>
+    <line_color>
+      <color red="0" green="51" blue="102">
+      </color>
+    </line_color>
+    <background_color>
+      <color red="0" green="51" blue="102">
+      </color>
+    </background_color>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Title</name>
+    <text>BTF OCEM E642 Power Supplies</text>
+    <x>20</x>
+    <y>10</y>
+    <width>500</width>
+    <height>50</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="26.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </foreground_color>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Subtitle</name>
+    <text>192.168.192.40:4014</text>
+    <x>550</x>
+    <y>25</y>
+    <width>180</width>
+    <height>20</height>
+    <font>
+      <font family="Liberation Mono" style="REGULAR" size="12.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="200" green="220" blue="255">
+      </color>
+    </foreground_color>
+    <horizontal_alignment>2</horizontal_alignment>
+  </widget>
+
+  <!-- Column Headers -->
+  <widget type="label" version="2.0.0">
+    <name>DeviceCol</name>
+    <text>Device</text>
+    <x>30</x>
+    <y>85</y>
+    <width>100</width>
+    <height>25</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="14.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="0" green="51" blue="102">
+      </color>
+    </foreground_color>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>AddrCol</name>
+    <text>Addr</text>
+    <x>145</x>
+    <y>85</y>
+    <width>50</width>
+    <height>25</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="14.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="0" green="51" blue="102">
+      </color>
+    </foreground_color>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>StatusCol</name>
+    <text>Status</text>
+    <x>200</x>
+    <y>85</y>
+    <width>100</width>
+    <height>25</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="14.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="0" green="51" blue="102">
+      </color>
+    </foreground_color>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>CurrentCol</name>
+    <text>Current</text>
+    <x>310</x>
+    <y>85</y>
+    <width>80</width>
+    <height>25</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="14.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="0" green="51" blue="102">
+      </color>
+    </foreground_color>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>PanelsCol</name>
+    <text>Open Control Panel</text>
+    <x>470</x>
+    <y>85</y>
+    <width>250</width>
+    <height>25</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="14.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="0" green="51" blue="102">
+      </color>
+    </foreground_color>
+    <horizontal_alignment>1</horizontal_alignment>
+  </widget>
+  
+  <!-- Separator line -->
+  <widget type="rectangle" version="2.0.0">
+    <name>Separator</name>
+    <x>20</x>
+    <y>115</y>
+    <width>710</width>
+    <height>2</height>
+    <line_color>
+      <color red="0" green="51" blue="102">
+      </color>
+    </line_color>
+    <background_color>
+      <color red="0" green="51" blue="102">
+      </color>
+    </background_color>
+  </widget>
+
+  <!-- QUATB102 Row -->
+  <widget type="label" version="2.0.0">
+    <name>Dev1Name</name>
+    <text>QUATB102</text>
+    <x>30</x>
+    <y>130</y>
+    <width>100</width>
+    <height>35</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="14.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Dev1Addr</name>
+    <text>0</text>
+    <x>160</x>
+    <y>130</y>
+    <width>30</width>
+    <height>35</height>
+    <font>
+      <font family="Liberation Mono" style="REGULAR" size="12.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="textupdate" version="2.0.0">
+    <name>Dev1Status</name>
+    <pv_name>BTF:MAG:OCEME642:QUATB102:Status</pv_name>
+    <x>200</x>
+    <y>133</y>
+    <width>100</width>
+    <height>30</height>
+    <background_color>
+      <color red="220" green="220" blue="220">
+      </color>
+    </background_color>
+    <horizontal_alignment>1</horizontal_alignment>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="textupdate" version="2.0.0">
+    <name>Dev1Current</name>
+    <pv_name>BTF:MAG:OCEME642:QUATB102:CURRENT_RB</pv_name>
+    <x>310</x>
+    <y>133</y>
+    <width>80</width>
+    <height>30</height>
+    <format>1</format>
+    <precision>2</precision>
+    <background_color>
+      <color red="230" green="240" blue="250">
+      </color>
+    </background_color>
+    <horizontal_alignment>2</horizontal_alignment>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Dev1Unit</name>
+    <text>A</text>
+    <x>395</x>
+    <y>133</y>
+    <width>25</width>
+    <height>30</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="12.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>Dev1Unimag</name>
+    <actions>
+      <action type="open_display">
+        <file>OCEM_unimag_v2.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATB102</R>
+          <IMAX>100</IMAX>
+          <VMAX>25</VMAX>
+        </macros>
+        <target>window</target>
+        <description>UNIMAG Interface</description>
+      </action>
+    </actions>
+    <text>UNIMAG</text>
+    <x>440</x>
+    <y>130</y>
+    <width>100</width>
+    <height>35</height>
+    <background_color>
+      <color red="0" green="180" blue="0">
+      </color>
+    </background_color>
+    <foreground_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </foreground_color>
+    <tooltip>Open UNIMAG-style control panel</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>Dev1Serial</name>
+    <actions>
+      <action type="open_display">
+        <file>OCEM_serial_v2.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATB102</R>
+        </macros>
+        <target>window</target>
+        <description>Serial Debug Interface</description>
+      </action>
+    </actions>
+    <text>Serial Debug</text>
+    <x>550</x>
+    <y>130</y>
+    <width>100</width>
+    <height>35</height>
+    <background_color>
+      <color red="100" green="100" blue="150">
+      </color>
+    </background_color>
+    <foreground_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </foreground_color>
+    <tooltip>Open Serial debug panel</tooltip>
+  </widget>
+  <widget type="led" version="2.0.0">
+    <name>Dev1LED</name>
+    <pv_name>BTF:MAG:OCEME642:QUATB102:Status</pv_name>
+    <x>665</x>
+    <y>138</y>
+    <width>20</width>
+    <height>20</height>
+  </widget>
+
+  <!-- QUATM001 Row -->
+  <widget type="label" version="2.0.0">
+    <name>Dev2Name</name>
+    <text>QUATM001</text>
+    <x>30</x>
+    <y>180</y>
+    <width>100</width>
+    <height>35</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="14.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Dev2Addr</name>
+    <text>2</text>
+    <x>160</x>
+    <y>180</y>
+    <width>30</width>
+    <height>35</height>
+    <font>
+      <font family="Liberation Mono" style="REGULAR" size="12.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="textupdate" version="2.0.0">
+    <name>Dev2Status</name>
+    <pv_name>BTF:MAG:OCEME642:QUATM001:Status</pv_name>
+    <x>200</x>
+    <y>183</y>
+    <width>100</width>
+    <height>30</height>
+    <background_color>
+      <color red="220" green="220" blue="220">
+      </color>
+    </background_color>
+    <horizontal_alignment>1</horizontal_alignment>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="textupdate" version="2.0.0">
+    <name>Dev2Current</name>
+    <pv_name>BTF:MAG:OCEME642:QUATM001:CURRENT_RB</pv_name>
+    <x>310</x>
+    <y>183</y>
+    <width>80</width>
+    <height>30</height>
+    <format>1</format>
+    <precision>2</precision>
+    <background_color>
+      <color red="230" green="240" blue="250">
+      </color>
+    </background_color>
+    <horizontal_alignment>2</horizontal_alignment>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Dev2Unit</name>
+    <text>A</text>
+    <x>395</x>
+    <y>183</y>
+    <width>25</width>
+    <height>30</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="12.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>Dev2Unimag</name>
+    <actions>
+      <action type="open_display">
+        <file>OCEM_unimag_v2.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATM001</R>
+          <IMAX>100</IMAX>
+          <VMAX>25</VMAX>
+        </macros>
+        <target>window</target>
+        <description>UNIMAG Interface</description>
+      </action>
+    </actions>
+    <text>UNIMAG</text>
+    <x>440</x>
+    <y>180</y>
+    <width>100</width>
+    <height>35</height>
+    <background_color>
+      <color red="0" green="180" blue="0">
+      </color>
+    </background_color>
+    <foreground_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </foreground_color>
+    <tooltip>Open UNIMAG-style control panel</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>Dev2Serial</name>
+    <actions>
+      <action type="open_display">
+        <file>OCEM_serial_v2.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATM001</R>
+        </macros>
+        <target>window</target>
+        <description>Serial Debug Interface</description>
+      </action>
+    </actions>
+    <text>Serial Debug</text>
+    <x>550</x>
+    <y>180</y>
+    <width>100</width>
+    <height>35</height>
+    <background_color>
+      <color red="100" green="100" blue="150">
+      </color>
+    </background_color>
+    <foreground_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </foreground_color>
+    <tooltip>Open Serial debug panel</tooltip>
+  </widget>
+  <widget type="led" version="2.0.0">
+    <name>Dev2LED</name>
+    <pv_name>BTF:MAG:OCEME642:QUATM001:Status</pv_name>
+    <x>665</x>
+    <y>188</y>
+    <width>20</width>
+    <height>20</height>
+  </widget>
+
+  <!-- QUATM004 Row -->
+  <widget type="label" version="2.0.0">
+    <name>Dev3Name</name>
+    <text>QUATM004</text>
+    <x>30</x>
+    <y>230</y>
+    <width>100</width>
+    <height>35</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="14.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Dev3Addr</name>
+    <text>1</text>
+    <x>160</x>
+    <y>230</y>
+    <width>30</width>
+    <height>35</height>
+    <font>
+      <font family="Liberation Mono" style="REGULAR" size="12.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="textupdate" version="2.0.0">
+    <name>Dev3Status</name>
+    <pv_name>BTF:MAG:OCEME642:QUATM004:Status</pv_name>
+    <x>200</x>
+    <y>233</y>
+    <width>100</width>
+    <height>30</height>
+    <background_color>
+      <color red="220" green="220" blue="220">
+      </color>
+    </background_color>
+    <horizontal_alignment>1</horizontal_alignment>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="textupdate" version="2.0.0">
+    <name>Dev3Current</name>
+    <pv_name>BTF:MAG:OCEME642:QUATM004:CURRENT_RB</pv_name>
+    <x>310</x>
+    <y>233</y>
+    <width>80</width>
+    <height>30</height>
+    <format>1</format>
+    <precision>2</precision>
+    <background_color>
+      <color red="230" green="240" blue="250">
+      </color>
+    </background_color>
+    <horizontal_alignment>2</horizontal_alignment>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Dev3Unit</name>
+    <text>A</text>
+    <x>395</x>
+    <y>233</y>
+    <width>25</width>
+    <height>30</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="12.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>Dev3Unimag</name>
+    <actions>
+      <action type="open_display">
+        <file>OCEM_unimag_v2.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATM004</R>
+          <IMAX>100</IMAX>
+          <VMAX>25</VMAX>
+        </macros>
+        <target>window</target>
+        <description>UNIMAG Interface</description>
+      </action>
+    </actions>
+    <text>UNIMAG</text>
+    <x>440</x>
+    <y>230</y>
+    <width>100</width>
+    <height>35</height>
+    <background_color>
+      <color red="0" green="180" blue="0">
+      </color>
+    </background_color>
+    <foreground_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </foreground_color>
+    <tooltip>Open UNIMAG-style control panel</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>Dev3Serial</name>
+    <actions>
+      <action type="open_display">
+        <file>OCEM_serial_v2.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATM004</R>
+        </macros>
+        <target>window</target>
+        <description>Serial Debug Interface</description>
+      </action>
+    </actions>
+    <text>Serial Debug</text>
+    <x>550</x>
+    <y>230</y>
+    <width>100</width>
+    <height>35</height>
+    <background_color>
+      <color red="100" green="100" blue="150">
+      </color>
+    </background_color>
+    <foreground_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </foreground_color>
+    <tooltip>Open Serial debug panel</tooltip>
+  </widget>
+  <widget type="led" version="2.0.0">
+    <name>Dev3LED</name>
+    <pv_name>BTF:MAG:OCEME642:QUATM004:Status</pv_name>
+    <x>665</x>
+    <y>238</y>
+    <width>20</width>
+    <height>20</height>
+  </widget>
+
+  <!-- QUATB101 Row -->
+  <widget type="label" version="2.0.0">
+    <name>Dev4Name</name>
+    <text>QUATB101</text>
+    <x>30</x>
+    <y>280</y>
+    <width>100</width>
+    <height>35</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="14.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Dev4Addr</name>
+    <text>3</text>
+    <x>160</x>
+    <y>280</y>
+    <width>30</width>
+    <height>35</height>
+    <font>
+      <font family="Liberation Mono" style="REGULAR" size="12.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="textupdate" version="2.0.0">
+    <name>Dev4Status</name>
+    <pv_name>BTF:MAG:OCEME642:QUATB101:Status</pv_name>
+    <x>200</x>
+    <y>283</y>
+    <width>100</width>
+    <height>30</height>
+    <background_color>
+      <color red="220" green="220" blue="220">
+      </color>
+    </background_color>
+    <horizontal_alignment>1</horizontal_alignment>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="textupdate" version="2.0.0">
+    <name>Dev4Current</name>
+    <pv_name>BTF:MAG:OCEME642:QUATB101:CURRENT_RB</pv_name>
+    <x>310</x>
+    <y>283</y>
+    <width>80</width>
+    <height>30</height>
+    <format>1</format>
+    <precision>2</precision>
+    <background_color>
+      <color red="230" green="240" blue="250">
+      </color>
+    </background_color>
+    <horizontal_alignment>2</horizontal_alignment>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="label" version="2.0.0">
+    <name>Dev4Unit</name>
+    <text>A</text>
+    <x>395</x>
+    <y>283</y>
+    <width>25</width>
+    <height>30</height>
+    <font>
+      <font family="Liberation Sans" style="BOLD" size="12.0">
+      </font>
+    </font>
+    <vertical_alignment>1</vertical_alignment>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>Dev4Unimag</name>
+    <actions>
+      <action type="open_display">
+        <file>OCEM_unimag_v2.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATB101</R>
+          <IMAX>100</IMAX>
+          <VMAX>25</VMAX>
+        </macros>
+        <target>window</target>
+        <description>UNIMAG Interface</description>
+      </action>
+    </actions>
+    <text>UNIMAG</text>
+    <x>440</x>
+    <y>280</y>
+    <width>100</width>
+    <height>35</height>
+    <background_color>
+      <color red="0" green="180" blue="0">
+      </color>
+    </background_color>
+    <foreground_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </foreground_color>
+    <tooltip>Open UNIMAG-style control panel</tooltip>
+  </widget>
+  <widget type="action_button" version="3.0.0">
+    <name>Dev4Serial</name>
+    <actions>
+      <action type="open_display">
+        <file>OCEM_serial_v2.bob</file>
+        <macros>
+          <P>BTF:MAG:OCEME642</P>
+          <R>QUATB101</R>
+        </macros>
+        <target>window</target>
+        <description>Serial Debug Interface</description>
+      </action>
+    </actions>
+    <text>Serial Debug</text>
+    <x>550</x>
+    <y>280</y>
+    <width>100</width>
+    <height>35</height>
+    <background_color>
+      <color red="100" green="100" blue="150">
+      </color>
+    </background_color>
+    <foreground_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </foreground_color>
+    <tooltip>Open Serial debug panel</tooltip>
+  </widget>
+  <widget type="led" version="2.0.0">
+    <name>Dev4LED</name>
+    <pv_name>BTF:MAG:OCEME642:QUATB101:Status</pv_name>
+    <x>665</x>
+    <y>288</y>
+    <width>20</width>
+    <height>20</height>
+  </widget>
+
+  <!-- Separator -->
+  <widget type="rectangle" version="2.0.0">
+    <name>Separator2</name>
+    <x>20</x>
+    <y>335</y>
+    <width>710</width>
+    <height>2</height>
+    <line_color>
+      <color red="180" green="180" blue="180">
+      </color>
+    </line_color>
+    <background_color>
+      <color red="180" green="180" blue="180">
+      </color>
+    </background_color>
+  </widget>
+
+  <!-- Info Footer -->
+  <widget type="label" version="2.0.0">
+    <name>Footer</name>
+    <text>OCEM E642 Power Supply Control System - Adaptive Polling Enabled</text>
+    <x>20</x>
+    <y>350</y>
+    <width>400</width>
+    <height>20</height>
+    <font>
+      <font family="Liberation Sans" style="ITALIC" size="11.0">
+      </font>
+    </font>
+    <foreground_color>
+      <color red="100" green="100" blue="100">
+      </color>
+    </foreground_color>
+  </widget>
+  
+  <!-- Polling Status Info -->
+  <widget type="group" version="3.0.0">
+    <name>PollingInfo</name>
+    <x>20</x>
+    <y>380</y>
+    <width>710</width>
+    <height>55</height>
+    <style>1</style>
+    <foreground_color>
+      <color red="100" green="100" blue="100">
+      </color>
+    </foreground_color>
+    <widget type="label" version="2.0.0">
+      <name>PollingLabel</name>
+      <text>Polling: Idle=1.0s (monitoring) | Active=0.1s (during commands) | Timeout=5.0s</text>
+      <x>10</x>
+      <y>5</y>
+      <width>650</width>
+      <height>20</height>
+      <font>
+        <font family="Liberation Mono" style="REGULAR" size="11.0">
+        </font>
+      </font>
+      <foreground_color>
+        <color red="80" green="80" blue="80">
+        </color>
+      </foreground_color>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>LegendLabel</name>
+      <text>Legend: UNIMAG = Standard control panel | Serial Debug = Raw protocol debugging</text>
+      <x>10</x>
+      <y>28</y>
+      <width>650</width>
+      <height>20</height>
+      <font>
+        <font family="Liberation Sans" style="ITALIC" size="10.0">
+        </font>
+      </font>
+      <foreground_color>
+        <color red="100" green="100" blue="100">
+        </color>
+      </foreground_color>
+    </widget>
+  </widget>
+</display>

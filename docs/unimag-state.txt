@@ -1,0 +1,416 @@
+UNIMAG Interface – Power Supply EPICS IOC Specification
+Process Variables (PVs)
+Current Control
+
+Current Readback (CURRENT_RB)
+Provides the measured output current of the magnet channel.
+PV format:
+
+$(P):$(R):CURRENT_RB
+
+
+Current Setpoint (CURRENT_SP)
+Sets the desired current for the magnet channel.
+PV format:
+
+$(P):$(R):CURRENT_SP
+
+Channel State Control
+
+Channel State Readback (STATE_RB)
+Reports the current operational state of the magnet channel.
+PV format:
+
+$(P):$(R):STATE_RB
+
+
+Channel State Setpoint (STATE_SP)
+Allows the user to request a change of the channel state (e.g. via ON, STANDBY, RESET commands).
+PV format:
+
+$(P):$(R):STATE_SP
+
+Configuration Parameters
+
+set_tolerance
+Allowed tolerance on CURRENT_RB when checking if the requested current has been reached.
+Default: 1
+
+zero_tolerance
+Allowed tolerance when checking that the current is zero.
+Default: 1
+
+set_timeout_s
+Timeout (in seconds) to verify that the requested current has been reached.
+If the timeout expires, the operation is considered failed.
+Default: 10
+
+max_retries
+Number of retries before declaring STATE_NOT_REACHED.
+
+Channel State Values (STATE_RB, STATE_SP)
+
+The channel state PVs represent the operational status of the magnet channel.
+
+Possible values:
+
+OFF – Magnet is powered off
+
+ON – Magnet is powered and active
+
+STANDBY – Magnet is in standby mode
+
+FAULT – A fault condition has been detected
+
+RESET – Reset operation in progress
+
+UNIMAG Machine State
+
+UNIMAG State Readback (UNIMAG_STATE_RB)
+Reports the internal UNIMAG state machine status.
+PV format:
+
+$(P):$(R):UNIMAG_STATE_RB
+
+Possible Values
+
+OK
+The power supply is ready to accept new commands.
+
+STATE_NOT_REACHED
+The requested state or current was not reached within tolerance and timeout.
+This is a low-level warning; the machine remains ready to accept new commands.
+
+ZERO_STBY
+The magnet is ramping down to zero current and transitioning to standby.
+
+CHANGE_POL
+A polarity change is in progress.
+
+GOING_TO_SET
+The magnet is ramping toward the requested current setpoint.
+
+UNIMAG State Machine Behavior
+Current Setpoint Handling (CURRENT_SP)
+
+When a new value is written to CURRENT_SP, the UNIMAG state machine operates as follows:
+
+Polarity Check
+
+The controller checks whether a polarity change is required.
+
+If a polarity change is needed, the state transitions to:
+
+ZERO_STBY → CHANGE_POL
+
+
+Ramp to Zero (if required)
+
+The current is ramped to zero.
+
+Zero is considered reached when:
+
+|CURRENT_RB| ≤ zero_tolerance
+
+
+The ramp must complete within set_timeout_s.
+
+If zero is not reached within the timeout (after max_retries attempts), the state becomes:
+
+STATE_NOT_REACHED
+
+
+Set Current
+
+If the current polarity already matches the desired polarity:
+
+The system transitions directly to:
+
+GOING_TO_SET
+
+
+The current is ramped to the requested value.
+
+Success condition:
+
+|CURRENT_RB − CURRENT_SP| ≤ set_tolerance
+
+
+If set_tolerance is 0, no verification is performed and the state transitions directly to OK.
+
+Polarity Mismatch
+
+If the current polarity does not match the requested polarity:
+
+Ramp to zero (ZERO_STBY)
+
+Perform polarity change (CHANGE_POL)
+
+Then proceed with step 3.
+
+Transition from ON to STANDBY
+
+If transitioning from ON to STANDBY:
+
+If:
+
+|CURRENT_RB| > zero_tolerance
+
+
+the system must first ramp to zero (ZERO_STBY).
+
+If the current is already within zero tolerance, the system can transition directly to STANDBY.
+
+If you want, I can also:
+
+Convert this into formal EPICS documentation
+
+Define state diagrams
+
+Suggest PV naming refinements
+
+Align it with EPICS record types (bo, ao, mbbi, calc, etc.)
+
+Just tell me 👍
+
+can you add the retry logic on state transitions max_retries, can you suggest refinements?
+
+Below is an extended and refined version of the specification that explicitly defines the retry logic (max_retries) for state transitions, clarifies failure semantics, and suggests architectural refinements that fit well with EPICS IOC design and operations practice.
+
+UNIMAG Interface – Power Supply EPICS IOC
+
+State Machine, Retry Logic, and Refinements
+
+Retry Logic (max_retries)
+
+max_retries defines how many times a state transition or verification step is retried before declaring a failure.
+
+General Rules
+
+Each verifiable transition (e.g. ramp-to-zero, ramp-to-set) is attempted up to:
+
+max_retries + 1
+
+
+total times (initial attempt + retries).
+
+A retry is triggered when:
+
+The expected condition is not met within set_timeout_s
+
+Or the power supply reports an incompatible or invalid state
+
+Between retries:
+
+The system returns to a safe intermediate state (ZERO_STBY or STANDBY)
+
+No user command is required to trigger retries
+
+If all retries fail:
+
+UNIMAG_STATE_RB is set to STATE_NOT_REACHED
+
+STATE_RB remains unchanged
+
+The IOC remains responsive to new commands
+
+Retry-Enabled State Transitions
+1. Ramp to Zero (ZERO_STBY)
+
+Entry Condition
+
+Polarity change required
+
+Transition from ON → STANDBY with |CURRENT_RB| > zero_tolerance
+
+Success Condition
+
+|CURRENT_RB| ≤ zero_tolerance
+
+
+within set_timeout_s
+
+Retry Behavior
+
+If timeout expires:
+
+Increment retry counter
+
+Re-issue zero-current command
+
+Remain in ZERO_STBY
+
+After max_retries failures:
+
+Transition to STATE_NOT_REACHED
+
+Exit retry loop
+
+2. Polarity Change (CHANGE_POL)
+
+Entry Condition
+
+Successful completion of ZERO_STBY
+
+Requested polarity differs from current polarity
+
+Success Condition
+
+Hardware reports correct polarity
+
+Retry Behavior
+
+If polarity does not change within set_timeout_s:
+
+Retry polarity change
+
+After max_retries failures:
+
+Transition to STATE_NOT_REACHED
+
+3. Ramp to Setpoint (GOING_TO_SET)
+
+Entry Condition
+
+Correct polarity is established
+
+Success Condition
+
+|CURRENT_RB − CURRENT_SP| ≤ set_tolerance
+
+
+within set_timeout_s
+(or immediate success if set_tolerance == 0)
+
+Retry Behavior
+
+On timeout:
+
+Increment retry counter
+
+Re-issue setpoint command
+
+After max_retries failures:
+
+Transition to STATE_NOT_REACHED
+
+Retry Counter Handling
+
+Retry counters are:
+
+Local to each transition
+
+Reset upon successful completion of that transition
+
+Retry counters are also reset when:
+
+A new CURRENT_SP is written
+
+A new STATE_SP command is issued
+
+Failure Semantics (STATE_NOT_REACHED)
+
+When STATE_NOT_REACHED is entered:
+
+The power supply remains in the last known safe electrical state
+
+UNIMAG_STATE_RB = STATE_NOT_REACHED
+
+The IOC:
+
+Accepts new commands
+
+Does not auto-retry unless a new command is issued
+
+A transition to RESET or a new CURRENT_SP clears the error
+
+Suggested Refinements
+1. Explicit Intermediate State Tracking
+
+Suggestion:
+Expose the active sub-state via an internal or optional PV:
+
+$(P):$(R):UNIMAG_STEP_RB
+
+
+Possible values:
+
+CHECK_POL
+
+RAMP_TO_ZERO
+
+POLARITY_CHANGE
+
+RAMP_TO_SET
+
+VERIFY
+
+This improves:
+
+Debugging
+
+Operator understanding
+
+Alarm correlation
+
+2. Explicit Alarm Severity Mapping
+
+Map failures to EPICS alarm severities:
+
+Condition	PV	Severity
+Timeout (retrying)	UNIMAG_STATE_RB	MINOR
+STATE_NOT_REACHED	UNIMAG_STATE_RB	MAJOR
+FAULT	STATE_RB	INVALID
+3. Add a Busy Indicator
+
+Add:
+
+$(P):$(R):BUSY_RB
+
+
+1 → State machine active
+
+0 → Idle / ready
+
+Useful for:
+
+GUIs
+
+Script synchronization
+
+Preventing overlapping commands
+
+4. Command Arbitration Rules
+
+Refinement:
+
+If a new CURRENT_SP arrives while BUSY_RB = 1:
+
+Abort current sequence
+
+Reset retry counters
+
+Restart state machine from polarity check
+
+This avoids deadlocks and race conditions.
+
+5. Optional Retry Backoff
+
+Add (optional):
+
+retry_delay
+
+
+Delay (seconds) between retries
+
+Prevents hammering slow or overloaded power supplies
+
+6. Formal Transition Table (Optional)
+
+If you want to formalize further, define transitions as:
+
+From	Trigger	To	Verify	Retry
+ON	CURRENT_SP	GOING_TO_SET	ΔI ≤ err	yes
+ON	POL mismatch	ZERO_STBY	I≈0	yes
+ZERO_STBY	Zero reached	CHANGE_POL	pol ok	yes
+CHANGE_POL	Pol OK	GOING_TO_SET	ΔI ≤ err	yes

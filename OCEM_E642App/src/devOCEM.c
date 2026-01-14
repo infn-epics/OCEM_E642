@@ -3,6 +3,10 @@
 #include <devSup.h>
 #include <stringinRecord.h>
 #include <stringoutRecord.h>
+#include <aoRecord.h>
+#include <aiRecord.h>
+#include <longinRecord.h>
+#include <longoutRecord.h>
 
 #include "drvOCEM.h"
 
@@ -117,6 +121,63 @@ static long si_read(stringinRecord *prec) {
         sprintf(prec->val,"%d", slave->integerPolarity);
         prec->val[sizeof(prec->val)-1] = '\0';
     }
+    else if (strcasecmp(p->var, "CMDSTATE") == 0) {
+        // Return numeric command state for mbbi record
+        sprintf(prec->val,"%d", (int)slave->cmdState);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "CMDSTATUS") == 0) {
+        // Return human-readable status message
+        strncpy(prec->val, slave->cmdStatusMsg, sizeof(prec->val));
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "LASTCMD") == 0) {
+        // Return last command sent
+        strncpy(prec->val, slave->lastCommand, sizeof(prec->val));
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    // UNIMAG state machine PVs
+    else if (strcasecmp(p->var, "UNIMAG_STATE") == 0) {
+        sprintf(prec->val, "%d", (int)slave->unimag.state);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "UNIMAG_STATUS") == 0) {
+        strncpy(prec->val, slave->unimag.statusMsg, sizeof(prec->val));
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "UNIMAG_BUSY") == 0) {
+        sprintf(prec->val, "%d", slave->unimag.busy);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "CHANNEL_STATE") == 0) {
+        sprintf(prec->val, "%d", (int)slave->channelState);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "CURRENT_RB_A") == 0) {
+        sprintf(prec->val, "%.4f", slave->currentRB);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "CURRENT_SP_A") == 0) {
+        sprintf(prec->val, "%.4f", slave->currentSP);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    // Config parameters readback
+    else if (strcasecmp(p->var, "SET_TOL") == 0) {
+        sprintf(prec->val, "%.3f", slave->unimagCfg.setTolerance);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "ZERO_TOL") == 0) {
+        sprintf(prec->val, "%.3f", slave->unimagCfg.zeroTolerance);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "SET_TIMEOUT") == 0) {
+        sprintf(prec->val, "%.1f", slave->unimagCfg.setTimeoutS);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
+    else if (strcasecmp(p->var, "MAX_RETRIES") == 0) {
+        sprintf(prec->val, "%d", slave->unimagCfg.maxRetries);
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
 
     // etc...
     return 0;
@@ -148,6 +209,25 @@ static long si_get_ioint_info(int cmd, stringinRecord *prec, IOSCANPVT *ppvt) {
         *ppvt = drv->slaves[p->addr].ioscanSelector;
     else if (strncmp(p->var, "INI",3) == 0)
         *ppvt = drv->slaves[p->addr].ioscanInit;
+    else if (strcasecmp(p->var, "CMDSTATE") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanCmdState;
+    else if (strcasecmp(p->var, "CMDSTATUS") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanCmdState;
+    else if (strcasecmp(p->var, "LASTCMD") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanCmdState;
+    // UNIMAG state machine I/O Intr
+    else if (strcasecmp(p->var, "UNIMAG_STATE") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanUnimag;
+    else if (strcasecmp(p->var, "UNIMAG_STATUS") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanUnimag;
+    else if (strcasecmp(p->var, "UNIMAG_BUSY") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanUnimag;
+    else if (strcasecmp(p->var, "CHANNEL_STATE") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanUnimag;
+    else if (strcasecmp(p->var, "CURRENT_RB_A") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanUnimag;
+    else if (strcasecmp(p->var, "CURRENT_SP_A") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanUnimag;
 
 
     
@@ -177,32 +257,62 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
     size_t nbytesIn=0;
     size_t nbytesOut=0;
     int eomReason = 0;
-    //printf("Called poll_request\n");
+    
+    // Get the slave and update state
+    OCEM_Slave *slave = findSlave(drv, slaveAddress);
+    if (slave) {
+        slave->cmdState = CMD_SENDING;
+        strncpy(slave->lastCommand, cmd, sizeof(slave->lastCommand) - 1);
+        snprintf(slave->cmdStatusMsg, sizeof(slave->cmdStatusMsg), "Sending: %s", cmd);
+        epicsTimeGetCurrent(&slave->cmdStartTime);
+        scanIoRequest(slave->ioscanCmdState);
+    }
+    
+    OCEM_INFO("[PS%d] CMD: sending '%s'\n", slaveAddress, cmd);
+    
     msg[0] = 0x05;        // ENQ
     msg[1] = (unsigned char) (slaveAddress+0x60);
     msgLen = 2;
-    errlogPrintf1("Writing ENQ + poll address %x\n",msg[1]);
+    
+    OCEM_DETAIL("[PS%d] CMD: ENQ+0x%02X\n", slaveAddress, msg[1]);
     
     status = drv->pasynOctet->write(drv->pasynInterface->drvPvt,drv->pasynUser, (const char*)msg, msgLen, &nbytesOut);
     if (status != asynSuccess) {
-        errlogPrintf("send_command: errore write enq +address\n");
+        OCEM_ERR("[PS%d] CMD: ENQ write error\n", slaveAddress);
+        if (slave) {
+            slave->cmdState = CMD_NOT_REACHED;
+            snprintf(slave->cmdStatusMsg, sizeof(slave->cmdStatusMsg), "FAILED: ENQ write error");
+            scanIoRequest(slave->ioscanCmdState);
+        }
         return -1;
     }
-    epicsThreadSleep(0.05);
+    
+    // Update state to waiting for ACK
+    if (slave) {
+        slave->cmdState = CMD_WAIT_ACK;
+        snprintf(slave->cmdStatusMsg, sizeof(slave->cmdStatusMsg), "Wait ACK: %s", cmd);
+        scanIoRequest(slave->ioscanCmdState);
+    }
+    
+    epicsThreadSleep(0.02);
     memset(response, 0, responseSize);
     status = drv->pasynOctet->read(drv->pasynInterface->drvPvt,drv->pasynUser, response,responseSize-1,  &nbytesIn, &eomReason);
     int retVal=0;
     
     if ((nbytesIn == 1) && ( (unsigned char)response[0]==0x6))
     {
-        //errlogPrintf("Obtained EOT FIFO EMPTY for slave %d ",slave->addr);
+        OCEM_DETAIL("[PS%d] CMD: got ACK\n", slaveAddress);
         retVal= 0;
     }
     else
     { 
-        errlogPrintf("send_command: errore read risposta al ENQ+address %d\n",slaveAddress);
-        errlogPrintf("send_command: read ricevuto, status=%d, nbytesIn=%zu, eomReason=%d\n", status, nbytesIn,eomReason);
-        errlogPrintf("send_command: read ricevuto byte 0x%02X\n", (unsigned char)response[0]);
+        OCEM_ERR("[PS%d] CMD: expected ACK but got 0x%02X (nbytes=%zu)\n", 
+                slaveAddress, (unsigned char)response[0], nbytesIn);
+        if (slave) {
+            slave->cmdState = CMD_NOT_REACHED;
+            snprintf(slave->cmdStatusMsg, sizeof(slave->cmdStatusMsg), "FAILED: No ACK (got 0x%02X)", (unsigned char)response[0]);
+            scanIoRequest(slave->ioscanCmdState);
+        }
         retVal = -1;
     }
     
@@ -220,18 +330,30 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
         unsigned char cdc = ocem_calc_cdc((const unsigned char*)msg, cmdLen); 
         msg[3 + cmdLen] = cdc;
         msgLen = 4 + cmdLen;
-        errlogPrintf("Sending command %s\n",cmd);
+        
+        OCEM_INFO("[PS%d] CMD: >>> '%s' >>>\n", slaveAddress, cmd);
+        
         status = drv->pasynOctet->write(drv->pasynInterface->drvPvt,drv->pasynUser, (const char*)msg, msgLen, &nbytesOut);
+        epicsThreadSleep(0.02);
         //NEED TO ADD READ FOR CLEANING
         memset(response, 0, responseSize);
         status = drv->pasynOctet->read(drv->pasynInterface->drvPvt,drv->pasynUser, response,responseSize-1,  &nbytesIn, &eomReason);
         if (status != asynSuccess) 
         {
-            errlogPrintf1("send_command: nothing to read after command\n");
+            OCEM_DETAIL("[PS%d] CMD: no response after command\n", slaveAddress);
         }
         else
         {
-            errlogPrintf1("send_command Reply: %s\n",response);
+            OCEM_DETAIL("[PS%d] CMD: response='%s'\n", slaveAddress, response);
+        }
+        
+        // Command sent successfully - set to VERIFYING state
+        // The polling loop will verify and update to DONE or NOT_REACHED
+        if (slave) {
+            slave->cmdState = CMD_VERIFYING;
+            slave->cmdVerifyCount = 0;
+            snprintf(slave->cmdStatusMsg, sizeof(slave->cmdStatusMsg), "Verifying: %s", cmd);
+            scanIoRequest(slave->ioscanCmdState);
         }
     }
     
@@ -377,12 +499,12 @@ static long so_write(stringoutRecord *prec)
     }
     if (!strcmp(p->var,"setPollingPeriod"))
     {
-        printf("setting polling period. Before: %f ",drv->ocemPollingPeriod);
+        printf("setting idle polling period. Before: %f ",drv->idlePollingPeriod);
         float newval;
         if (sscanf(prec->val,"%f",&newval) == 1)
         {
             printf(" After: new val %f\n",newval);
-            drv->ocemPollingPeriod=newval;
+            drv->idlePollingPeriod=newval;
             return 0;
         }
         return -1;
@@ -396,6 +518,53 @@ static long so_write(stringoutRecord *prec)
         slave->requestedCurrent = newValue;
         slave->requestedPolarity = (newValue >= 0) ? +1 : -1;
         slave->Ostate = STATE_REQ_SET_CURRENT;
+        epicsMutexUnlock(drv->ioLock);
+        return 0;
+    }
+    // UNIMAG state machine: set current setpoint (in Amperes)
+    if (!strcmp(p->var,"UNIMAG_CURRENT_SP"))
+    {
+        OCEM_Slave* slave = findSlave(drv, p->addr);
+        if (!slave) return -1;
+        
+        // Check if busy
+        if (slave->unimag.busy) {
+            errlogPrintf("UNIMAG_CURRENT_SP: rejected (busy)\n");
+            return -1;
+        }
+        
+        double newCurrentA = atof(prec->val);
+        epicsMutexLock(drv->ioLock);
+        unimag_setCurrentSP(slave, newCurrentA);
+        epicsMutexUnlock(drv->ioLock);
+        return 0;
+    }
+    // UNIMAG state machine: set channel state (ON, STANDBY, RESET)
+    if (!strcmp(p->var,"UNIMAG_STATE_SP"))
+    {
+        OCEM_Slave* slave = findSlave(drv, p->addr);
+        if (!slave) return -1;
+        
+        // Check if busy
+        if (slave->unimag.busy) {
+            errlogPrintf("UNIMAG_STATE_SP: rejected (busy)\n");
+            return -1;
+        }
+        
+        ChannelState targetState = CH_OFF;
+        if (strcasecmp(prec->val, "ON") == 0) {
+            targetState = CH_ON;
+        } else if (strcasecmp(prec->val, "STANDBY") == 0 || strcasecmp(prec->val, "STB") == 0) {
+            targetState = CH_STANDBY;
+        } else if (strcasecmp(prec->val, "RESET") == 0 || strcasecmp(prec->val, "RES") == 0) {
+            targetState = CH_RESET;
+        } else {
+            errlogPrintf("UNIMAG_STATE_SP: invalid state '%s'\n", prec->val);
+            return -1;
+        }
+        
+        epicsMutexLock(drv->ioLock);
+        unimag_setStateSP(slave, targetState);
         epicsMutexUnlock(drv->ioLock);
         return 0;
     } 
@@ -427,3 +596,344 @@ struct {
     so_write
 };
 epicsExportAddress(dset, devSoOCEM);
+
+/* ========== Analog Output device support for UNIMAG config ========== */
+
+static long ao_init_record(aoRecord *prec)
+{
+    ocemDpvt *pvt = calloc(1, sizeof(ocemDpvt));
+    int addr;
+    char varname[32];
+    if (!pvt) return S_db_noMemory;
+
+    if (sscanf(prec->out.value.instio.string, "%d %31s", &addr, varname) != 2) {
+        errlogPrintf("Bad OUT '%s' in record %s\n",
+            prec->out.value.instio.string, prec->name);
+        return S_db_badField;
+    }
+    if (prec->out.type != INST_IO) {
+        recGblRecordError(S_db_badField, (void*)prec,
+            "devOcemAo (init_record) Illegal OUT field");
+        return S_db_badField;
+    }
+    pvt->addr = addr;
+    strncpy(pvt->var, varname, sizeof(pvt->var));
+    pvt->var[sizeof(pvt->var)-1] = '\0';
+    prec->dpvt = pvt;
+    
+    // Initialize with current value
+    OCEM_Slave* slave = findSlave(drv, addr);
+    if (slave) {
+        if (strcasecmp(varname, "SET_TOL") == 0) {
+            prec->val = slave->unimagCfg.setTolerance;
+        } else if (strcasecmp(varname, "ZERO_TOL") == 0) {
+            prec->val = slave->unimagCfg.zeroTolerance;
+        } else if (strcasecmp(varname, "SET_TIMEOUT") == 0) {
+            prec->val = slave->unimagCfg.setTimeoutS;
+        } else if (strcasecmp(varname, "RETRY_DELAY") == 0) {
+            prec->val = slave->unimagCfg.retryDelay;
+        }
+    }
+    
+    return 2; // Don't convert
+}
+
+static long ao_write(aoRecord *prec)
+{
+    ocemDpvt *p = (ocemDpvt*)prec->dpvt;
+    if (!p || !drv) return 0;  // Not ready yet, succeed silently for PINI
+    
+    OCEM_Slave* slave = findSlave(drv, p->addr);
+    if (!slave) return 0;  // Slave not found, succeed silently for PINI
+    
+    if (strcasecmp(p->var, "SET_TOL") == 0) {
+        slave->unimagCfg.setTolerance = prec->val;
+        errlogPrintf("UNIMAG[%d]: set_tolerance = %.3f\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "ZERO_TOL") == 0) {
+        slave->unimagCfg.zeroTolerance = prec->val;
+        errlogPrintf("UNIMAG[%d]: zero_tolerance = %.3f\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "SET_TIMEOUT") == 0) {
+        slave->unimagCfg.setTimeoutS = prec->val;
+        errlogPrintf("UNIMAG[%d]: set_timeout = %.1f s\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "RETRY_DELAY") == 0) {
+        slave->unimagCfg.retryDelay = prec->val;
+        errlogPrintf("UNIMAG[%d]: retry_delay = %.1f s\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "UNIMAG_CURRENT_SP") == 0) {
+        // Allow ao record for current setpoint (alternative to stringout)
+        if (slave->unimag.busy) {
+            errlogPrintf("UNIMAG_CURRENT_SP: rejected (busy)\n");
+            return -1;
+        }
+        epicsMutexLock(drv->ioLock);
+        unimag_setCurrentSP(slave, prec->val);
+        epicsMutexUnlock(drv->ioLock);
+    } else {
+        errlogPrintf("ao_write: unknown var '%s'\n", p->var);
+        return -1;
+    }
+    
+    return 0;
+}
+
+struct {
+    long      number;
+    DEVSUPFUN report;
+    DEVSUPFUN init;
+    DEVSUPFUN init_record;
+    DEVSUPFUN get_ioint_info;
+    DEVSUPFUN write;
+    DEVSUPFUN special_linconv;
+} devAoOCEM = {
+    6,
+    NULL,
+    NULL,
+    (DEVSUPFUN)ao_init_record,
+    NULL,
+    (DEVSUPFUN)ao_write,
+    NULL
+};
+epicsExportAddress(dset, devAoOCEM);
+
+/* ========== Longin device support for UNIMAG state ========== */
+
+static long longin_init_record(longinRecord *prec)
+{
+    ocemDpvt *pvt = calloc(1, sizeof(ocemDpvt));
+    int addr;
+    char varname[32];
+    if (!pvt) return S_db_noMemory;
+
+    if (sscanf(prec->inp.value.instio.string, "%d %31s", &addr, varname) != 2) {
+        errlogPrintf("Bad INP '%s' in record %s\n",
+            prec->inp.value.instio.string, prec->name);
+        return S_db_badField;
+    }
+    if (prec->inp.type != INST_IO) {
+        recGblRecordError(S_db_badField, (void*)prec,
+            "devOcemLongin (init_record) Illegal INP field");
+        return S_db_badField;
+    }
+    pvt->addr = addr;
+    strncpy(pvt->var, varname, sizeof(pvt->var));
+    pvt->var[sizeof(pvt->var)-1] = '\0';
+    prec->dpvt = pvt;
+    return 0;
+}
+
+static long longin_read(longinRecord *prec)
+{
+    ocemDpvt *p = (ocemDpvt*)prec->dpvt;
+    if (!p || !drv) return -1;
+    
+    OCEM_Slave* slave = findSlave(drv, p->addr);
+    if (!slave) return -1;
+    
+    if (strcasecmp(p->var, "UNIMAG_STATE") == 0) {
+        prec->val = (epicsInt32)slave->unimag.state;
+    } else if (strcasecmp(p->var, "CHANNEL_STATE") == 0) {
+        prec->val = (epicsInt32)slave->channelState;
+    } else if (strcasecmp(p->var, "UNIMAG_BUSY") == 0) {
+        prec->val = slave->unimag.busy ? 1 : 0;
+    } else if (strcasecmp(p->var, "MAX_RETRIES") == 0) {
+        prec->val = slave->unimagCfg.maxRetries;
+    } else if (strcasecmp(p->var, "RETRY_COUNT") == 0) {
+        prec->val = slave->unimag.retryCount;
+    } else {
+        return -1;
+    }
+    
+    return 0;
+}
+
+static long longin_get_ioint_info(int cmd, longinRecord *prec, IOSCANPVT *ppvt) {
+    ocemDpvt *p = (ocemDpvt*)prec->dpvt;
+    if (!p) return -1;
+    
+    if (strcasecmp(p->var, "UNIMAG_STATE") == 0 ||
+        strcasecmp(p->var, "CHANNEL_STATE") == 0 ||
+        strcasecmp(p->var, "UNIMAG_BUSY") == 0 ||
+        strcasecmp(p->var, "RETRY_COUNT") == 0) {
+        *ppvt = drv->slaves[p->addr].ioscanUnimag;
+    }
+    return 0;
+}
+
+struct {
+    long      number;
+    DEVSUPFUN report;
+    DEVSUPFUN init;
+    DEVSUPFUN init_record;
+    DEVSUPFUN get_ioint_info;
+    DEVSUPFUN read;
+} devLiOCEM = {
+    5,
+    NULL,
+    NULL,
+    (DEVSUPFUN)longin_init_record,
+    (DEVSUPFUN)longin_get_ioint_info,
+    (DEVSUPFUN)longin_read
+};
+epicsExportAddress(dset, devLiOCEM);
+
+/* ========== Longout device support for UNIMAG config ========== */
+
+static long longout_init_record(longoutRecord *prec)
+{
+    ocemDpvt *pvt = calloc(1, sizeof(ocemDpvt));
+    int addr;
+    char varname[32];
+    if (!pvt) return S_db_noMemory;
+
+    if (sscanf(prec->out.value.instio.string, "%d %31s", &addr, varname) != 2) {
+        errlogPrintf("Bad OUT '%s' in record %s\n",
+            prec->out.value.instio.string, prec->name);
+        return S_db_badField;
+    }
+    if (prec->out.type != INST_IO) {
+        recGblRecordError(S_db_badField, (void*)prec,
+            "devOcemLongout (init_record) Illegal OUT field");
+        return S_db_badField;
+    }
+    pvt->addr = addr;
+    strncpy(pvt->var, varname, sizeof(pvt->var));
+    pvt->var[sizeof(pvt->var)-1] = '\0';
+    prec->dpvt = pvt;
+    
+    // Initialize with current value
+    OCEM_Slave* slave = findSlave(drv, addr);
+    if (slave && strcasecmp(varname, "MAX_RETRIES") == 0) {
+        prec->val = slave->unimagCfg.maxRetries;
+    }
+    
+    return 0;
+}
+
+static long longout_write(longoutRecord *prec)
+{
+    ocemDpvt *p = (ocemDpvt*)prec->dpvt;
+    if (!p || !drv) return 0;  // Not ready yet, succeed silently for PINI
+    
+    OCEM_Slave* slave = findSlave(drv, p->addr);
+    if (!slave) return 0;  // Slave not found, succeed silently for PINI
+    
+    if (strcasecmp(p->var, "MAX_RETRIES") == 0) {
+        slave->unimagCfg.maxRetries = prec->val;
+        errlogPrintf("UNIMAG[%d]: max_retries = %d\n", p->addr, (int)prec->val);
+    } else if (strcasecmp(p->var, "UNIMAG_STATE_SP") == 0) {
+        // longout for state setpoint by number
+        if (slave->unimag.busy) {
+            errlogPrintf("UNIMAG_STATE_SP: rejected (busy)\n");
+            return -1;
+        }
+        ChannelState targetState = (ChannelState)prec->val;
+        epicsMutexLock(drv->ioLock);
+        unimag_setStateSP(slave, targetState);
+        epicsMutexUnlock(drv->ioLock);
+    } else {
+        errlogPrintf("longout_write: unknown var '%s'\n", p->var);
+        return -1;
+    }
+    
+    return 0;
+}
+
+struct {
+    long      number;
+    DEVSUPFUN report;
+    DEVSUPFUN init;
+    DEVSUPFUN init_record;
+    DEVSUPFUN get_ioint_info;
+    DEVSUPFUN write;
+} devLoOCEM = {
+    5,
+    NULL,
+    NULL,
+    (DEVSUPFUN)longout_init_record,
+    NULL,
+    (DEVSUPFUN)longout_write
+};
+epicsExportAddress(dset, devLoOCEM);
+
+/* ========== AI device support for UNIMAG readbacks ========== */
+
+static long ai_init_record(aiRecord *prec)
+{
+    ocemDpvt *pvt = calloc(1, sizeof(ocemDpvt));
+    int addr;
+    char varname[32];
+    if (!pvt) return S_db_noMemory;
+
+    if (sscanf(prec->inp.value.instio.string, "%d %31s", &addr, varname) != 2) {
+        errlogPrintf("Bad INP '%s' in record %s\n",
+            prec->inp.value.instio.string, prec->name);
+        return S_db_badField;
+    }
+    if (prec->inp.type != INST_IO) {
+        recGblRecordError(S_db_badField, (void*)prec,
+            "devOcemAi (init_record) Illegal INP field");
+        return S_db_badField;
+    }
+    pvt->addr = addr;
+    strncpy(pvt->var, varname, sizeof(pvt->var));
+    pvt->var[sizeof(pvt->var)-1] = '\0';
+    prec->dpvt = pvt;
+    return 2; // Don't convert
+}
+
+static long ai_read(aiRecord *prec)
+{
+    ocemDpvt *p = (ocemDpvt*)prec->dpvt;
+    if (!p || !drv) return -1;
+    
+    OCEM_Slave* slave = findSlave(drv, p->addr);
+    if (!slave) return -1;
+    
+    if (strcasecmp(p->var, "CURRENT_RB_A") == 0) {
+        prec->val = slave->currentRB;
+    } else if (strcasecmp(p->var, "CURRENT_SP_A") == 0) {
+        prec->val = slave->currentSP;
+    } else if (strcasecmp(p->var, "VOLTAGE_RB") == 0) {
+        prec->val = slave->voltageRB;
+    } else if (strcasecmp(p->var, "SET_TOL") == 0) {
+        prec->val = slave->unimagCfg.setTolerance;
+    } else if (strcasecmp(p->var, "ZERO_TOL") == 0) {
+        prec->val = slave->unimagCfg.zeroTolerance;
+    } else if (strcasecmp(p->var, "SET_TIMEOUT") == 0) {
+        prec->val = slave->unimagCfg.setTimeoutS;
+    } else {
+        return -1;
+    }
+    
+    return 2; // Don't convert
+}
+
+static long ai_get_ioint_info(int cmd, aiRecord *prec, IOSCANPVT *ppvt) {
+    ocemDpvt *p = (ocemDpvt*)prec->dpvt;
+    if (!p) return -1;
+    
+    if (strcasecmp(p->var, "CURRENT_RB_A") == 0 ||
+        strcasecmp(p->var, "CURRENT_SP_A") == 0 ||
+        strcasecmp(p->var, "VOLTAGE_RB") == 0) {
+        *ppvt = drv->slaves[p->addr].ioscanUnimag;
+    }
+    return 0;
+}
+
+struct {
+    long      number;
+    DEVSUPFUN report;
+    DEVSUPFUN init;
+    DEVSUPFUN init_record;
+    DEVSUPFUN get_ioint_info;
+    DEVSUPFUN read;
+    DEVSUPFUN special_linconv;
+} devAiOCEM = {
+    6,
+    NULL,
+    NULL,
+    (DEVSUPFUN)ai_init_record,
+    (DEVSUPFUN)ai_get_ioint_info,
+    (DEVSUPFUN)ai_read,
+    NULL
+};
+epicsExportAddress(dset, devAiOCEM);

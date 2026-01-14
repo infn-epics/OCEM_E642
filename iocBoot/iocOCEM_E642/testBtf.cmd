@@ -15,6 +15,20 @@ OCEM_E642Ioc_registerRecordDeviceDriver(pdbbase)
 drvAsynIPPortConfigure("OCEM_PORT", "192.168.192.40:4014") 
 ocemInit "OCEM_PORT",4,"0,2,1,3"
 
+# Configure polling rates:
+#   idlePeriod    - polling interval when no commands active (seconds)
+#   activePeriod  - polling interval when commands are being processed (seconds)
+#   activeTimeout - how long to stay in active mode after last command (seconds)
+# Default: idle=1.0s, active=0.1s, timeout=5.0s
+ocemSetPollingRates 1.0, 0.5, 5.0
+
+# Set debug level (can also be changed at runtime via IOC shell):
+#   0 = Errors only (default)
+#   1 = Basic info (commands sent, polling cycles)
+#   2 = Protocol details (ENQ/ACK/NAK, raw bytes)
+#   3 = Full trace (every function call, all data)
+ocemSetDebug 1
+
 #QUATM08
 #drvAsynIPPortConfigure("OCEM_PORT", "192.168.192.30:4004") 
 #ocemInit "OCEM_PORT",1,"7"
