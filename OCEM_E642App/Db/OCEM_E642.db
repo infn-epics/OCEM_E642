@@ -32,23 +32,11 @@ record(ai, "$(P):$(R):VMAX") {
 
 
 
+# CurrentNum kept for backward compatibility / debugging
 record(ai, "$(P):$(R):CurrentNum") {
     field(DTYP, "Soft Channel")
     field(INP, "$(P):$(R):CurrentStr NPP NMS")
     field(SCAN, "Passive")
-    field(FLNK, "$(P):$(R):CURRENT_RB")
-}
-
-
-record(calc, "$(P):$(R):CURRENT_RB") {
-    field(INPA, "$(P):$(R):CurrentNum NPP NMS")     # valore numerico grezzo
-    field(INPB, "$(P):$(R):IMAX NPP NMS")           # valore massimo
-    field(INPC, "$(P):$(R):CURRENT_PRG_MAX NPP NMS")    # fattore di scala
-    field(INPD, "$(P):$(R):IntPolarity NPP NMS")
-    field(CALC, "C>0?((A*B)/C)*D:0")                # protect against div by 0
-    field(PREC, "4")                                # 4 decimali di precisione
-    field(SCAN, "Passive")                         # si aggiorna automaticamente
-    field(EGU,  "A")                                # unità di misura
 }
 
 record(calc, "$(P):$(R):VOLTAGE_RB") {
@@ -92,8 +80,9 @@ record(stringin, "$(P):$(R):Polarity") {
     field(SCAN, "I/O Intr")
     
 }
-record(stringin, "$(P):$(R):IntPolarity") {
-    field(DESC, "Legge la polarità")
+# Integer polarity value for calc records: +1=POS, -1=NEG, 0=OPN
+record(longin, "$(P):$(R):IntPolarity") {
+    field(DESC, "Numeric polarity value")
     field(DTYP, "OCEME642")
     field(INP,  "@$(ADDR) INTPOLA")
     field(SCAN, "I/O Intr")
@@ -110,10 +99,45 @@ record(stringin, "$(P):$(R):Alarms") {
     field(SCAN, "I/O Intr")
 }
 
+# Raw alarm presence indicator (0=OK, 1=Alarm active)
+record(longin, "$(P):$(R):HAS_ALARM_RAW") {
+    field(DESC, "Alarm present raw")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) HAS_ALARM")
+    field(SCAN, "I/O Intr")
+    field(FLNK, "$(P):$(R):HAS_ALARM")
+}
+
+# Alarm status (binary indicator)
+record(bi, "$(P):$(R):HAS_ALARM") {
+    field(DESC, "Alarm present indicator")
+    field(INP,  "$(P):$(R):HAS_ALARM_RAW NPP NMS")
+    field(SCAN, "Passive")
+    field(ZNAM, "OK")
+    field(ONAM, "ALARM")
+    field(ZSV,  "NO_ALARM")
+    field(OSV,  "MAJOR")
+}
+
+# Alarm bitmask (32-bit): bit N = alarm N+1 active
+record(longin, "$(P):$(R):ALARM_MASK") {
+    field(DESC, "Alarm bitmask")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) ALARM_MASK")
+    field(SCAN, "I/O Intr")
+}
+
 record(stringin, "$(P):$(R):SELECTOR") {
     field(DESC, " LOCAL or REMOTE")
     field(DTYP, "OCEME642")
     field(INP,  "@$(ADDR) SEL")    # indirizzo + eventuale parametro
+    field(SCAN, "I/O Intr")
+}
+
+record(stringin, "$(P):$(R):VERSION") {
+    field(DESC, "PS firmware version")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) VER")
     field(SCAN, "I/O Intr")
 }
 
@@ -244,13 +268,19 @@ record(stringout, "$(P):$(R):PROGRAMDATA_RB") {
     field(VAL,  "PRG S")        # valore di default
 }
 
-record(stringout, "$(P):$(R):SET_COMPLETE_CURRENT") {
+# Old raw current set command (deprecated - use CURRENT_SP instead)
+record(stringout, "$(P):$(R):SETCURRENT_RAW_SETI") {
     field(DTYP, "OCEME642")
     field(OUT,  "@$(ADDR) SETI")
     field(FLNK, "$(P):$(R):IMAX")
-    
 }
 
+# Helper record to read VMAX into driver (mirrors IMAX reading pattern)
+record(stringout, "$(P):$(R):SETVOLTAGE_RAW_SETV") {
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) SETV")
+    field(FLNK, "$(P):$(R):VMAX")
+}
 
 
 record(stringout, "$(P):$(R):setRMT") {
@@ -317,10 +347,10 @@ record(stringin, "$(P):$(R):LAST_CMD") {
 # ============================================
 
 # ------------------------------------
-# Current Setpoint (Amperes) - Main Input
+# Current Setpoint (Amperes) - Main Interface
 # ------------------------------------
-record(ao, "$(P):$(R):UNIMAG:CURRENT_SP") {
-    field(DESC, "UNIMAG current setpoint in Amperes")
+record(ao, "$(P):$(R):CURRENT_SP") {
+    field(DESC, "Current setpoint in Amperes")
     field(DTYP, "OCEME642")
     field(OUT,  "@$(ADDR) UNIMAG_CURRENT_SP")
     field(EGU,  "A")
@@ -330,10 +360,13 @@ record(ao, "$(P):$(R):UNIMAG:CURRENT_SP") {
     field(HOPR, "$(IMAX)")
     field(LOPR, "-$(IMAX)")
 }
+alias("$(P):$(R):CURRENT_SP", "$(P):$(R):SET_COMPLETE_CURRENT")
 
-# State Setpoint (ON, STANDBY, RESET)
-record(mbbo, "$(P):$(R):UNIMAG:STATE_SP") {
-    field(DESC, "UNIMAG state setpoint")
+# ------------------------------------
+# State Setpoint (ON, STANDBY, RESET) - Main Interface
+# ------------------------------------
+record(mbbo, "$(P):$(R):STATE_SP") {
+    field(DESC, "State setpoint")
     field(DTYP, "Raw Soft Channel")
     field(ZRVL, "0")
     field(ZRST, "OFF")
@@ -341,97 +374,110 @@ record(mbbo, "$(P):$(R):UNIMAG:STATE_SP") {
     field(ONST, "ON")
     field(TWVL, "2")
     field(TWST, "STANDBY")
-    field(THVL, "4")
+    field(THVL, "3")
     field(THST, "RESET")
-    field(FLNK, "$(P):$(R):UNIMAG:STATE_SP_OUT")
+    field(FRVL, "4")
+    field(FRST, "INTERLOCK")
+    field(FVVL, "5")
+    field(FVST, "ERROR")
+    field(FLNK, "$(P):$(R):state_router")
 }
 
-# State setpoint command forwarder
-record(longout, "$(P):$(R):UNIMAG:STATE_SP_OUT") {
+# State routing - ON command
+record(calcout, "$(P):$(R):state_router") {
+    field(DESC, "Route ON command")
+    field(INPA, "$(P):$(R):STATE_SP")
+    field(CALC, "A=1")
+    field(OCAL, "1")
+    field(OOPT, "When Non-zero")
+    field(OUT,  "$(P):$(R):SetON.PROC PP")
+    field(FLNK, "$(P):$(R):state_router1")
+}
+
+# State routing - STANDBY command
+record(calcout, "$(P):$(R):state_router1") {
+    field(DESC, "Route STB command")
+    field(INPA, "$(P):$(R):STATE_SP")
+    field(CALC, "A=2")
+    field(OOPT, "When Non-zero")
+    field(OUT,  "$(P):$(R):SetSTANDBY.PROC PP")
+    field(FLNK, "$(P):$(R):state_router2")
+}
+
+# State routing - RESET command
+record(calcout, "$(P):$(R):state_router2") {
+    field(DESC, "Route RST command")
+    field(INPA, "$(P):$(R):STATE_SP")
+    field(CALC, "A=3")
+    field(OOPT, "When Non-zero")
+    field(OUT,  "$(P):$(R):RESET_ALARMS.PROC PP")
+}
+
+# State setpoint command forwarder (for driver state machine)
+record(longout, "$(P):$(R):STATE_SP_OUT") {
     field(DESC, "Send state setpoint to driver")
     field(DTYP, "OCEME642")
     field(OUT,  "@$(ADDR) UNIMAG_STATE_SP")
     field(OMSL, "closed_loop")
-    field(DOL,  "$(P):$(R):UNIMAG:STATE_SP NPP")
+    field(DOL,  "$(P):$(R):STATE_SP NPP")
 }
 
 # ------------------------------------
-# UNIMAG State Machine Status
+# State Machine Status (internal state machine state)
 # ------------------------------------
 
 # Raw state value from driver
-record(longin, "$(P):$(R):UNIMAG:STATE_RAW") {
-    field(DESC, "UNIMAG state raw value")
+record(longin, "$(P):$(R):SM_STATE_RAW") {
+    field(DESC, "State machine raw value")
     field(DTYP, "OCEME642")
     field(INP,  "@$(ADDR) UNIMAG_STATE")
     field(SCAN, "I/O Intr")
-    field(FLNK, "$(P):$(R):UNIMAG:STATE_RB")
+    field(FLNK, "$(P):$(R):SM_STATE_RB")
 }
 
-# Enumerated UNIMAG state
-record(mbbi, "$(P):$(R):UNIMAG:STATE_RB") {
-    field(DESC, "UNIMAG state machine status")
-    field(INP,  "$(P):$(R):UNIMAG:STATE_RAW NPP NMS")
+# Enumerated state machine state
+# Values match UnimagState enum: INIT=0, OK=1, NOT_REACHED=2, ZERO_STBY=3, CHANGE_POL=4, WAIT_POL=5, GOING_TO_SET=6
+record(mbbi, "$(P):$(R):SM_STATE_RB") {
+    field(DESC, "State machine status")
+    field(INP,  "$(P):$(R):SM_STATE_RAW NPP NMS")
     field(SCAN, "Passive")
     field(ZRVL, "0")
-    field(ZRST, "OK")
+    field(ZRST, "INIT")
     field(ZRSV, "NO_ALARM")
     field(ONVL, "1")
-    field(ONST, "NOT_REACHED")
-    field(ONSV, "MAJOR")
-    field(TWVL, "2")
-    field(TWST, "ZERO_STBY")
-    field(TWSV, "MINOR")
-    field(THVL, "3")
-    field(THST, "CHANGE_POL")
-    field(THSV, "MINOR")
-    field(FRVL, "4")
-    field(FRST, "GOING_TO_SET")
-    field(FRSV, "MINOR")
-}
-
-# Channel state (OFF, ON, STANDBY, FAULT, RESET)
-record(longin, "$(P):$(R):UNIMAG:CHANNEL_STATE_RAW") {
-    field(DESC, "Channel state raw value")
-    field(DTYP, "OCEME642")
-    field(INP,  "@$(ADDR) CHANNEL_STATE")
-    field(SCAN, "I/O Intr")
-    field(FLNK, "$(P):$(R):UNIMAG:CHANNEL_STATE_RB")
-}
-
-record(mbbi, "$(P):$(R):UNIMAG:CHANNEL_STATE_RB") {
-    field(DESC, "Channel state readback")
-    field(INP,  "$(P):$(R):UNIMAG:CHANNEL_STATE_RAW NPP NMS")
-    field(SCAN, "Passive")
-    field(ZRVL, "0")
-    field(ZRST, "OFF")
-    field(ZRSV, "NO_ALARM")
-    field(ONVL, "1")
-    field(ONST, "ON")
+    field(ONST, "OK")
     field(ONSV, "NO_ALARM")
     field(TWVL, "2")
-    field(TWST, "STANDBY")
-    field(TWSV, "NO_ALARM")
+    field(TWST, "NOT_REACHED")
+    field(TWSV, "MAJOR")
     field(THVL, "3")
-    field(THST, "FAULT")
-    field(THSV, "MAJOR")
+    field(THST, "ZERO_STBY")
+    field(THSV, "NO_ALARM")
     field(FRVL, "4")
-    field(FRST, "RESET")
-    field(FRSV, "MINOR")
+    field(FRST, "CHANGE_POL")
+    field(FRSV, "NO_ALARM")
+    field(FVVL, "5")
+    field(FVST, "WAIT_POL")
+    field(FVSV, "NO_ALARM")
+    field(SXVL, "6")
+    field(SXST, "GOING_TO_SET")
+    field(SXSV, "NO_ALARM")
 }
 
+# (CHANNEL_STATE removed - use STATE_RB instead)
+
 # Busy indicator
-record(longin, "$(P):$(R):UNIMAG:BUSY_RAW") {
-    field(DESC, "UNIMAG busy raw")
+record(longin, "$(P):$(R):BUSY_RAW") {
+    field(DESC, "Busy raw")
     field(DTYP, "OCEME642")
     field(INP,  "@$(ADDR) UNIMAG_BUSY")
     field(SCAN, "I/O Intr")
-    field(FLNK, "$(P):$(R):UNIMAG:BUSY_RB")
+    field(FLNK, "$(P):$(R):BUSY_RB")
 }
 
-record(bi, "$(P):$(R):UNIMAG:BUSY_RB") {
-    field(DESC, "UNIMAG busy indicator")
-    field(INP,  "$(P):$(R):UNIMAG:BUSY_RAW NPP NMS")
+record(bi, "$(P):$(R):BUSY_RB") {
+    field(DESC, "Busy indicator")
+    field(INP,  "$(P):$(R):BUSY_RAW NPP NMS")
     field(SCAN, "Passive")
     field(ZNAM, "Idle")
     field(ONAM, "Busy")
@@ -440,16 +486,16 @@ record(bi, "$(P):$(R):UNIMAG:BUSY_RB") {
 }
 
 # Status message
-record(stringin, "$(P):$(R):UNIMAG:STATUS") {
-    field(DESC, "UNIMAG status message")
+record(stringin, "$(P):$(R):STATUS_MSG") {
+    field(DESC, "Status message")
     field(DTYP, "OCEME642")
     field(INP,  "@$(ADDR) UNIMAG_STATUS")
     field(SCAN, "I/O Intr")
 }
 
-# Current readback from UNIMAG (in Amperes)
-record(ai, "$(P):$(R):UNIMAG:CURRENT_RB") {
-    field(DESC, "UNIMAG current readback in Amperes")
+# Current readback (in Amperes) - Main Interface
+record(ai, "$(P):$(R):CURRENT_RB") {
+    field(DESC, "Current readback in Amperes")
     field(DTYP, "OCEME642")
     field(INP,  "@$(ADDR) CURRENT_RB_A")
     field(SCAN, "I/O Intr")
@@ -458,8 +504,8 @@ record(ai, "$(P):$(R):UNIMAG:CURRENT_RB") {
 }
 
 # Current setpoint readback (in Amperes)
-record(ai, "$(P):$(R):UNIMAG:CURRENT_SP_RB") {
-    field(DESC, "UNIMAG current setpoint readback")
+record(ai, "$(P):$(R):CURRENT_SP_RB") {
+    field(DESC, "Current setpoint readback")
     field(DTYP, "OCEME642")
     field(INP,  "@$(ADDR) CURRENT_SP_A")
     field(SCAN, "I/O Intr")
@@ -468,7 +514,7 @@ record(ai, "$(P):$(R):UNIMAG:CURRENT_SP_RB") {
 }
 
 # Retry count
-record(longin, "$(P):$(R):UNIMAG:RETRY_COUNT") {
+record(longin, "$(P):$(R):RETRY_COUNT") {
     field(DESC, "Current retry count")
     field(DTYP, "OCEME642")
     field(INP,  "@$(ADDR) RETRY_COUNT")
@@ -478,56 +524,219 @@ record(longin, "$(P):$(R):UNIMAG:RETRY_COUNT") {
 # ------------------------------------
 # UNIMAG Configuration Parameters
 # ------------------------------------
+# Macro defaults:
+#   SET_TOLERANCE=1      - Allowed tolerance on CURRENT_RB when checking if requested current reached
+#   ZERO_TOLERANCE=1     - Allowed tolerance when checking that current is zero
+#   SET_TIMEOUT_S=10     - Timeout (seconds) to verify requested current reached
+#   INIT_TIMEOUT_S=60    - Timeout (seconds) before retrying PRG initialization
+#
+# NOTE: Retry logic has been removed to simplify operation.
+# If timeout occurs, operation fails immediately. Retries were masking
+# underlying communication issues on the RS485 bus.
 
-# Set tolerance (Amperes)
-record(ao, "$(P):$(R):UNIMAG:SET_TOL") {
+# Set tolerance (Amperes) - Allowed tolerance on CURRENT_RB when checking if requested current reached
+record(ao, "$(P):$(R):set_tolerance") {
     field(DESC, "Setpoint tolerance")
     field(DTYP, "OCEME642")
     field(OUT,  "@$(ADDR) SET_TOL")
     field(EGU,  "A")
     field(PREC, "3")
-    field(VAL,  "1.0")
+    field(VAL,  "$(SET_TOLERANCE=1)")
+    field(DRVL, "0")
+    field(DRVH, "100")
+    field(HOPR, "100")
+    field(LOPR, "0")
     field(PINI, "YES")
 }
 
-# Zero tolerance (Amperes)
-record(ao, "$(P):$(R):UNIMAG:ZERO_TOL") {
+# Zero tolerance (Amperes) - Allowed tolerance when checking that current is zero
+record(ao, "$(P):$(R):zero_tolerance") {
     field(DESC, "Zero current tolerance")
     field(DTYP, "OCEME642")
     field(OUT,  "@$(ADDR) ZERO_TOL")
     field(EGU,  "A")
     field(PREC, "3")
-    field(VAL,  "1.0")
+    field(VAL,  "$(ZERO_TOLERANCE=1)")
+    field(DRVL, "0")
+    field(DRVH, "100")
+    field(HOPR, "100")
+    field(LOPR, "0")
     field(PINI, "YES")
 }
 
-# Setpoint timeout (seconds)
-record(ao, "$(P):$(R):UNIMAG:SET_TIMEOUT") {
+# Setpoint timeout (seconds) - Timeout to verify requested current reached
+record(ao, "$(P):$(R):set_timeout_s") {
     field(DESC, "Setpoint timeout")
     field(DTYP, "OCEME642")
     field(OUT,  "@$(ADDR) SET_TIMEOUT")
     field(EGU,  "s")
     field(PREC, "1")
-    field(VAL,  "10.0")
+    field(VAL,  "$(SET_TIMEOUT_S=10)")
+    field(DRVL, "1")
+    field(DRVH, "300")
+    field(HOPR, "300")
+    field(LOPR, "1")
     field(PINI, "YES")
 }
 
-# Max retries
-record(longout, "$(P):$(R):UNIMAG:MAX_RETRIES") {
-    field(DESC, "Maximum retry count")
+# Init timeout (seconds) - Timeout before retrying PRG initialization
+record(ao, "$(P):$(R):init_timeout_s") {
+    field(DESC, "Init timeout before retry")
     field(DTYP, "OCEME642")
-    field(OUT,  "@$(ADDR) MAX_RETRIES")
-    field(VAL,  "3")
-    field(PINI, "YES")
-}
-
-# Retry delay (seconds)
-record(ao, "$(P):$(R):UNIMAG:RETRY_DELAY") {
-    field(DESC, "Delay between retries")
-    field(DTYP, "OCEME642")
-    field(OUT,  "@$(ADDR) RETRY_DELAY")
+    field(OUT,  "@$(ADDR) INIT_TIMEOUT")
     field(EGU,  "s")
     field(PREC, "1")
-    field(VAL,  "1.0")
+    field(VAL,  "$(INIT_TIMEOUT_S=60)")
+    field(DRVL, "10")
+    field(DRVH, "600")
+    field(HOPR, "600")
+    field(LOPR, "10")
+    field(PINI, "YES")
+}
+
+# ------------------------------------
+# PRG Data Readbacks (detailed initialization info)
+# ------------------------------------
+
+# PRG Initialized flag (1 = initialized, 0 = waiting)
+record(longin, "$(P):$(R):PRG:initialized") {
+    field(DESC, "PRG init status")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) PRG_INIT")
+    field(SCAN, "I/O Intr")
+    field(EGU,  "")
+    field(HIGH, "0")
+    field(HSV,  "MINOR")
+}
+
+# Current range max (raw DAC value)
+record(longin, "$(P):$(R):PRG:current_max") {
+    field(DESC, "Current range max (raw)")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) INI_CURMAX")
+    field(SCAN, "I/O Intr")
+    field(EGU,  "counts")
+}
+
+# Current range min (raw DAC value)
+record(longin, "$(P):$(R):PRG:current_min") {
+    field(DESC, "Current range min (raw)")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) INI_CURMIN")
+    field(SCAN, "I/O Intr")
+    field(EGU,  "counts")
+}
+
+# Voltage range max (raw DAC value)
+record(longin, "$(P):$(R):PRG:voltage_max") {
+    field(DESC, "Voltage range max (raw)")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) INI_VOLMAX")
+    field(SCAN, "I/O Intr")
+    field(EGU,  "counts")
+}
+
+# Voltage range min (raw DAC value)
+record(longin, "$(P):$(R):PRG:voltage_min") {
+    field(DESC, "Voltage range min (raw)")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) INI_VOLMIN")
+    field(SCAN, "I/O Intr")
+    field(EGU,  "counts")
+}
+
+# IMAX parameter (Amperes)
+record(ai, "$(P):$(R):PRG:imax") {
+    field(DESC, "Max current setting")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) IMAX_RB")
+    field(SCAN, "I/O Intr")
+    field(EGU,  "A")
+    field(PREC, "1")
+}
+
+# VMAX parameter (Volts)
+record(ai, "$(P):$(R):PRG:vmax") {
+    field(DESC, "Max voltage setting")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) VMAX_RB")
+    field(SCAN, "I/O Intr")
+    field(EGU,  "V")
+    field(PREC, "1")
+}
+
+# ============================================
+# Unsolicited Message Thresholds (TH command)
+# Controls when PS sends spontaneous COR/TEN messages
+# Default: 5% of IMAX/VMAX
+# ============================================
+
+# Current threshold (Amperes)
+# PS sends COR message when current changes by more than this value
+record(ao, "$(P):$(R):THRESHOLD:current") {
+    field(DESC, "Current msg threshold")
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) CURRENT_TH")
+    field(EGU,  "A")
+    field(PREC, "3")
+    field(VAL,  "$(CURRENT_THRESHOLD=-1)")
+    field(DRVL, "0")
+    field(DRVH, "$(IMAX)")
+    field(HOPR, "$(IMAX)")
+    field(LOPR, "0")
+    field(PINI, "YES")
+}
+
+# Voltage threshold (Volts)
+# PS sends TEN message when voltage changes by more than this value
+record(ao, "$(P):$(R):THRESHOLD:voltage") {
+    field(DESC, "Voltage msg threshold")
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) VOLTAGE_TH")
+    field(EGU,  "V")
+    field(PREC, "3")
+    field(VAL,  "$(VOLTAGE_THRESHOLD=-1)")
+    field(DRVL, "0")
+    field(DRVH, "$(VMAX)")
+    field(HOPR, "$(VMAX)")
+    field(LOPR, "0")
+    field(PINI, "YES")
+}
+
+# ============================================
+# Forced Query Configuration
+# ============================================
+# When FIFO is empty, periodically send SL/SA commands to refresh state
+# 0 = disabled, otherwise interval in seconds (default 60)
+
+# Forced state (SL) query interval
+# Forces dump of status (STA, POL, ALL, SEL, VER)
+record(ao, "$(P):$(R):FORCE_STATE_QUERY_S") {
+    field(DESC, "Forced SL query interval")
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) FORCE_STATE_QUERY_S")
+    field(EGU,  "s")
+    field(PREC, "0")
+    field(VAL,  "$(FORCE_STATE_QUERY_S=60)")
+    field(DRVL, "0")
+    field(DRVH, "3600")
+    field(HOPR, "3600")
+    field(LOPR, "0")
+    field(PINI, "YES")
+}
+
+# Forced operating (SA) query interval
+# Forces dump of operating data (COR, TEN)
+record(ao, "$(P):$(R):FORCE_OPERATING_QUERY_S") {
+    field(DESC, "Forced SA query interval")
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) FORCE_OPERATING_QUERY_S")
+    field(EGU,  "s")
+    field(PREC, "0")
+    field(VAL,  "$(FORCE_OPERATING_QUERY_S=60)")
+    field(DRVL, "0")
+    field(DRVH, "3600")
+    field(HOPR, "3600")
+    field(LOPR, "0")
     field(PINI, "YES")
 }

@@ -32,21 +32,42 @@ $(P):$(R):STATE_SP
 
 Configuration Parameters
 
+These parameters are exposed as EPICS PVs and can be changed at runtime.
+Each parameter is initialized via macro with a default value.
+
 set_tolerance
+PV: $(P):$(R):UNIMAG:set_tolerance
 Allowed tolerance on CURRENT_RB when checking if the requested current has been reached.
-Default: 1
+Macro: SET_TOLERANCE
+Default: 1 A
 
 zero_tolerance
+PV: $(P):$(R):UNIMAG:zero_tolerance
 Allowed tolerance when checking that the current is zero.
-Default: 1
+Macro: ZERO_TOLERANCE
+Default: 1 A
 
 set_timeout_s
+PV: $(P):$(R):UNIMAG:set_timeout_s
 Timeout (in seconds) to verify that the requested current has been reached.
 If the timeout expires, the operation is considered failed.
-Default: 10
+Macro: SET_TIMEOUT_S
+Default: 10 s
 
 max_retries
+PV: $(P):$(R):UNIMAG:max_retries
 Number of retries before declaring STATE_NOT_REACHED.
+Macro: MAX_RETRIES
+Default: 3
+
+retry_delay
+PV: $(P):$(R):UNIMAG:retry_delay
+Delay (in seconds) between retries.
+Macro: RETRY_DELAY
+Default: 1 s
+
+Example dbLoadRecords with custom configuration:
+dbLoadRecords("OCEM_E642.db", "P=BTF:MAG,R=PS1,ADDR=0,IMAX=100,VMAX=25,SET_TOLERANCE=0.5,ZERO_TOLERANCE=0.5,SET_TIMEOUT_S=15,MAX_RETRIES=5,RETRY_DELAY=2")
 
 Channel State Values (STATE_RB, STATE_SP)
 
@@ -64,6 +85,7 @@ FAULT – A fault condition has been detected
 
 RESET – Reset operation in progress
 
+
 UNIMAG Machine State
 
 UNIMAG State Readback (UNIMAG_STATE_RB)
@@ -73,6 +95,7 @@ PV format:
 $(P):$(R):UNIMAG_STATE_RB
 
 Possible Values
+INIT the PS is init phase.
 
 OK
 The power supply is ready to accept new commands.

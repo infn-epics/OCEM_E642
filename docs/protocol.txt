@@ -1,0 +1,176 @@
+OCEM E642 Power Supply – Complete Command Reference with Examples
+Power Supply State & Control Commands
+Command	Format	Description	Example
+ON Regolatore	"ON<term>"	Turns PS ON (if in remote mode)	"ON<LF>"
+OFF Regolatore	"OFF<term>"	Turns PS OFF	"OFF<LF>"
+STANDBY Regolatore	"STB<term>"	Puts PS in STANDBY	"STB<LF>"
+Polarità Positiva	"POS<term>"	Sets positive polarity	"POS<LF>"
+Polarità Negativa	"NEG<term>"	Sets negative polarity	"NEG<LF>"
+Circuito Aperto	"OPN<term>"	Opens current circuit	"OPN<LF>"
+Reset Allarmi	"RES<term>"	Clears non-permanent alarms	"RES<LF>"
+Start Rampa	"STR<term>"	Starts ramp execution	"STR<LF>"
+Current & Ramp Control Commands
+Command	Format	Description	Example
+Set Point Corrente	"SP<space><value><term>"	Current setpoint (7 digits)	"SP 0500000<LF>"
+Velocità Rampa Up	"VRUP<space><value><term>"	Upward ramp speed (7 digits)	"VRUP 0001000<LF>"
+Velocità Rampa Down	"VRDW<space><value><term>"	Downward ramp speed (7 digits)	"VRDW 0001000<LF>"
+Status Request Commands
+Command	Format	Description	Response Example
+Richiesta Stato Analogico	"SA<term>"	Current & voltage values	"COR 0500000<LF>TEN 0100000<LF>"
+Richiesta Stato Logico	"SL<term>"	All status info	"SEL PRED<LF>STA ON<LF>POL POS<LF>ALL 01 03<LF>"
+Richiesta Versione	"VER<term>"	Firmware version	"VER OCEM spa TeleoperatoreA950101PS_TYPE<LF>"
+Configuration Commands
+Programma Canale Analogico (PRG)
+Format: "PRG<space><tipo><num><space><minval><space><maxval><space><um><term>"
+
+Parameters:
+
+<tipo>: I (input) or O (output)
+
+<num>: Channel number (0-4)
+
+<minval>: 7-digit minimum value
+
+<maxval>: 7-digit maximum value
+
+<um>: Unit of measure
+
+Channel Mapping:
+
+text
+I0: Current value (16-bit digital)
+I1: Voltage value (8-bit analog, 0-10V)
+O0: Current setpoint (16-bit digital)
+O1: Ramp up speed (12-bit analog, 0-10V)
+O2: Ramp down speed (12-bit analog, 0-10V)
+Examples:
+
+ascii
+"PRG I0 0000000 0500000 mA<LF>"    // Current: 0-500 mA
+"PRG I1 0000000 0100000 mV<LF>"    // Voltage: 0-10 V
+"PRG O1 0000000 0005000 AS<LF>"    // Ramp up: 0-5 A/s
+"PRG O2 0000000 0003000 AS<LF>"    // Ramp down: 0-3 A/s
+Soglia Analogica (TH)
+Format: "TH<space>I<num><space><val><term>"
+
+Sets threshold for spontaneous current/voltage messages.
+
+Examples:
+
+ascii
+"TH I0 000500<LF>"    // Current threshold: 50 units
+"TH I1 000100<LF>"    // Voltage threshold: 10 units
+Channel Management Commands
+Command	Format	Description	Example
+Remote	"REM<term>"	Opens Primary Channel	"REM<LF>"
+Local	"LOC<term>"	Opens Service Channel	"LOC<LF>"
+Abilitazione	"ABL<term>"	Enables Service Channel	"ABL<LF>"
+Disabilitazione	"DIL<term>"	Disables Service Channel	"DIL<LF>"
+Spontaneous Messages (from PS)
+Message	Format	Trigger	Example
+Stato Regolatore	"STA<space><stato><term>"	State change	"STA ON<LF>"
+Stato Selettore	"SEL<space><stato><term>"	Selector change	"SEL PRED<LF>"
+Stato Polarità	"POL<space><stato><term>"	Polarity change	"POL POS<LF>"
+Stato Allarmi	"ALL<list><term>"	Alarm change	"ALL 01 03 24<LF>"
+Stato Valore Corrente	"COR<space><value><term>"	Current > threshold	"COR 0485000<LF>"
+Stato Valore Tensione	"TEN<space><value><term>"	Voltage > threshold	"TEN 0098000<LF>"
+Versione	"VER<space>OCEM spa Teleoperatore<vers><term>"	Power-on	"VER OCEM spa TeleoperatoreA950101PS_TYPE<LF>"
+Cold Restart	"COLD RESTART<term>"	Lost configuration	"COLD RESTART<LF>"
+Complete Operation Examples
+1. Full PS Configuration Sequence
+ascii
+// 1. Enable remote control
+"REM<LF>"
+
+// 2. Configure analog channels
+"PRG I0 0000000 0500000 mA<LF>"    // 0-500 mA current reading
+"PRG O0 0000000 0500000 mA<LF>"    // 0-500 mA current setpoint
+"PRG O1 0000000 0005000 AS<LF>"    // 0-5 A/s ramp up
+"PRG O2 0000000 0003000 AS<LF>"    // 0-3 A/s ramp down
+
+// 3. Set thresholds
+"TH I0 000500<LF>"                  // 50 mA threshold
+"TH I1 000100<LF>"                  // 1 V threshold
+
+// 4. Turn ON and configure
+"ON<LF>"
+"POS<LF>"
+"SP 0250000<LF>"                    // 250 mA setpoint
+"VRUP 0002000<LF>"                  // 2 A/s ramp up
+"VRDW 0001000<LF>"                  // 1 A/s ramp down
+"STR<LF>"                           // Start ramp
+2. Monitoring Sequence
+ascii
+// Request complete status
+"SL<LF>"
+
+// Expected response:
+// SEL PRED<LF>      // Remote mode
+// STA ON<LF>        // PS is ON
+// POL POS<LF>       // Positive polarity
+// ALL 01 03<LF>     // Alarms 01 and 03 active
+
+// Request current values
+"SA<LF>"
+
+// Expected response:
+// COR 0248000<LF>   // Current: 248 mA
+// TEN 0095000<LF>   // Voltage: 9.5 V
+3. Protocol-Specific Examples
+Port A (RS485 - Polling-Selecting):
+
+ascii
+// Master polls Slave at address 1
+Master: <ENQ>61
+Slave:  <EOT>                         // No data
+
+// Master sends command to Slave 1
+Master: <ENQ>61
+Slave:  <ACK>
+Master: <STX>61SP 0250000<ETX><bcc>
+Slave:  <ACK>
+
+// Master reads response
+Master: <ENQ>61
+Slave:  <STX>61STA ON<ETX><bcc>
+Master: <ACK>
+Slave:  <EOT>
+Port B (RS232 - Simple ASCII):
+
+ascii
+// Direct command and response
+Host: "SP 0250000<LF>"
+PS:   "COR 0248000<LF>"               // Response after execution
+Important Protocol Notes
+Addressing (Port A only):
+
+Slave addresses: 0-31
+
+Polling address = 0x60 + slave address
+
+Selecting address = 0x60 + slave address
+
+Numeric Format:
+
+All values are 7-digit integers with leading zeros
+
+Example: 500 mA = "0500000"
+
+Checksum Calculation (Port A):
+
+python
+# Example for "STA ON" to slave address 1
+message = b"\x02\x61STA ON\x03"  # <STX><addr>STA ON<ETX>
+bcc = 0
+for byte in message[1:]:  # Skip <STX>
+    bcc ^= byte
+bcc |= 0x80  # Set MSB to 1
+Execution Conditions:
+
+State commands require selector in "PRED" (remote) mode
+
+Commands accepted in any state but executed only if compatible
+
+Default scaling applied if PRG not configured
+
+This reference includes all PS operations and protocol commands with practical examples. Use Port A for reliable multi-device control and Port B for local diagnostics only.

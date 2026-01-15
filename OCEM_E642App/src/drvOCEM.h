@@ -30,11 +30,25 @@
 // 3 = Full trace (every function entry/exit, all data)
 extern int ocemDebugLevel;
 
+// Timestamp helper for debug output
+static inline void ocem_debug_timestamp(void) {
+    epicsTimeStamp now;
+    epicsTimeGetCurrent(&now);
+    char timeStr[32];
+    epicsTimeToStrftime(timeStr, sizeof(timeStr), "%H:%M:%S.%03f", &now);
+    errlogPrintf("[%s] ", timeStr);
+}
+
 #define OCEM_DEBUG(level, ...) \
-    do { if (ocemDebugLevel >= (level)) errlogPrintf(__VA_ARGS__); } while(0)
+    do { \
+        if (ocemDebugLevel >= (level)) { \
+            ocem_debug_timestamp(); \
+            errlogPrintf(__VA_ARGS__); \
+        } \
+    } while(0)
 
 // Convenience macros for different levels
-#define OCEM_ERR(...)   errlogPrintf(__VA_ARGS__)
+#define OCEM_ERR(...)   do { ocem_debug_timestamp(); errlogPrintf(__VA_ARGS__); } while(0)
 #define OCEM_INFO(...)  OCEM_DEBUG(1, __VA_ARGS__)
 #define OCEM_DETAIL(...) OCEM_DEBUG(2, __VA_ARGS__)
 #define OCEM_TRACE(...) OCEM_DEBUG(3, __VA_ARGS__)
@@ -87,11 +101,13 @@ typedef enum {
 
 // UNIMAG state machine state (UNIMAG_STATE_RB)
 typedef enum {
-    UNIMAG_OK = 0,              // Ready to accept new commands
-    UNIMAG_NOT_REACHED = 1,     // Requested state/current not reached (MAJOR alarm)
-    UNIMAG_ZERO_STBY = 2,       // Ramping down to zero current
-    UNIMAG_CHANGE_POL = 3,      // Polarity change in progress
-    UNIMAG_GOING_TO_SET = 4     // Ramping toward requested setpoint
+    UNIMAG_INIT = 0,            // Waiting for PRG initialization
+    UNIMAG_OK = 1,              // Ready to accept new commands
+    UNIMAG_NOT_REACHED = 2,     // Requested state/current not reached (MAJOR alarm)
+    UNIMAG_ZERO_STBY = 3,       // Ramping down to zero current
+    UNIMAG_CHANGE_POL = 4,      // Waiting for STANDBY before polarity change
+    UNIMAG_WAIT_POL = 5,        // Waiting for polarity change to complete
+    UNIMAG_GOING_TO_SET = 6     // Ramping toward requested setpoint
 } UnimagState;
 
 // UNIMAG configuration parameters (per slave)
@@ -99,6 +115,7 @@ typedef struct {
     double setTolerance;        // Tolerance for current setpoint verification (A)
     double zeroTolerance;       // Tolerance for zero current check (A)
     double setTimeoutS;         // Timeout for reaching setpoint (seconds)
+    double initTimeoutS;        // Timeout for initialization before retry (seconds)
     int maxRetries;             // Max retries before STATE_NOT_REACHED
     double retryDelay;          // Delay between retries (seconds)
 } UnimagConfig;
@@ -112,6 +129,10 @@ typedef struct {
     int targetPolarity;         // Target polarity: +1, -1, or 0
     ChannelState targetState;   // Requested channel state
     epicsTimeStamp stepStartTime;   // Timestamp when current step started
+    epicsTimeStamp initStartTime;   // Timestamp when initialization started
+    epicsTimeStamp lastProgressTime; // Last time current was moving toward target
+    double lastCurrentRB;           // Last current readback for progress check
+    int prgInitialized;         // 1 = PRG data received, 0 = waiting
     char statusMsg[80];         // Human-readable status message
 } UnimagContext;
 
@@ -122,8 +143,11 @@ typedef struct {
     char current[40];
     char voltage[40];
     char polarity[40];
-    char alarms[40];
+    char alarms[40];        // Raw alarm string from PS (e.g., "01 03 24" or "NO ")
+    int hasAlarm;           // 1 if any alarm is active, 0 if no alarms
+    epicsUInt32 alarmMask;  // Bitmask of active alarms (bit N = alarm N+1)
     char selector[40];
+    char version[80];   // Firmware version string from VER command
     double IMAX;
     double VMAX;
     
@@ -151,6 +175,17 @@ typedef struct {
     double currentRB;               // Current readback in Amperes (calculated)
     double voltageRB;               // Voltage readback in Volts (calculated)
     double currentSP;               // Current setpoint in Amperes (from user)
+    
+    // Threshold for unsolicited messages (TH command)
+    double currentThresholdA;       // Current threshold in Amperes (default 5% of IMAX)
+    double voltageThresholdV;       // Voltage threshold in Volts (default 5% of VMAX)
+    int thresholdsSent;             // Flag: thresholds have been sent to PS
+    
+    // Forced query configuration (when FIFO is empty)
+    double forceStateQueryS;        // Seconds between forced SL queries (0=disabled, default 60)
+    double forceOperatingQueryS;    // Seconds between forced SA queries (0=disabled, default 60)
+    epicsTimeStamp lastForceStateTime;   // Timestamp of last forced SL query
+    epicsTimeStamp lastForceOperatingTime; // Timestamp of last forced SA query
     
     //IOSCANPVT per notificare record
     IOSCANPVT ioscanStatus;
@@ -207,6 +242,7 @@ void unimag_setStateSP(OCEM_Slave *slave, ChannelState state);
 void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave);
 const char* unimag_getStateName(UnimagState state);
 const char* unimag_getChannelStateName(ChannelState state);
+int ocem_sendThreshold(OCEM_Slave *slave, int channel, double valueA);
 
 extern  OCEM_Driver *drv;
 

@@ -38,10 +38,10 @@
   </widget>
   <widget type="label" version="2.0.0">
     <name>DeviceName</name>
-    <text>$(P):$(R)</text>
-    <x>620</x>
-    <y>15</y>
-    <width>220</width>
+    <text>$(R)</text>
+    <x>590</x>
+    <y>20</y>
+    <width>260</width>
     <height>25</height>
     <font>
       <font family="Liberation Sans" style="BOLD" size="14.0">
@@ -51,7 +51,7 @@
       <color red="200" green="220" blue="255">
       </color>
     </foreground_color>
-    <horizontal_alignment>2</horizontal_alignment>
+    <horizontal_alignment>1</horizontal_alignment>
   </widget>
   <widget type="group" version="3.0.0">
     <name>StatusGroup</name>

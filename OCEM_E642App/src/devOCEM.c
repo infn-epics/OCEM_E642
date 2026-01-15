@@ -97,6 +97,10 @@ static long si_read(stringinRecord *prec) {
         strncpy(prec->val, slave->selector, sizeof(prec->val));
         prec->val[sizeof(prec->val)-1] = '\0';
     }
+    else if (strcasecmp(p->var, "VER") == 0) {
+        strncpy(prec->val, slave->version, sizeof(prec->val));
+        prec->val[sizeof(prec->val)-1] = '\0';
+    }
     else if (strcasecmp(p->var, "INI_CURMAX") == 0) {
         sprintf(prec->val,"%d", slave->currentPrgH);
         prec->val[sizeof(prec->val)-1] = '\0';
@@ -207,6 +211,8 @@ static long si_get_ioint_info(int cmd, stringinRecord *prec, IOSCANPVT *ppvt) {
         *ppvt = drv->slaves[p->addr].ioscanAlarms;
     else if (strcasecmp(p->var, "SEL") == 0)
         *ppvt = drv->slaves[p->addr].ioscanSelector;
+    else if (strcasecmp(p->var, "VER") == 0)
+        *ppvt = drv->slaves[p->addr].ioscanInit;
     else if (strncmp(p->var, "INI",3) == 0)
         *ppvt = drv->slaves[p->addr].ioscanInit;
     else if (strcasecmp(p->var, "CMDSTATE") == 0)
@@ -521,6 +527,11 @@ static long so_write(stringoutRecord *prec)
         epicsMutexUnlock(drv->ioLock);
         return 0;
     }
+    // SETV is just for reading VMAX via FLNK chain (no actual command)
+    if (!strcmp(p->var,"SETV"))
+    {
+        return 0;
+    }
     // UNIMAG state machine: set current setpoint (in Amperes)
     if (!strcmp(p->var,"UNIMAG_CURRENT_SP"))
     {
@@ -621,19 +632,10 @@ static long ao_init_record(aoRecord *prec)
     pvt->var[sizeof(pvt->var)-1] = '\0';
     prec->dpvt = pvt;
     
-    // Initialize with current value
-    OCEM_Slave* slave = findSlave(drv, addr);
-    if (slave) {
-        if (strcasecmp(varname, "SET_TOL") == 0) {
-            prec->val = slave->unimagCfg.setTolerance;
-        } else if (strcasecmp(varname, "ZERO_TOL") == 0) {
-            prec->val = slave->unimagCfg.zeroTolerance;
-        } else if (strcasecmp(varname, "SET_TIMEOUT") == 0) {
-            prec->val = slave->unimagCfg.setTimeoutS;
-        } else if (strcasecmp(varname, "RETRY_DELAY") == 0) {
-            prec->val = slave->unimagCfg.retryDelay;
-        }
-    }
+    // For config records, apply the DB value to the driver during init
+    // The DB VAL field contains the macro-substituted value (e.g., ZERO_TOLERANCE=1.8)
+    // which PINI will process after init, so we don't need to do anything here.
+    // Just let PINI fire and ao_write will apply the value.
     
     return 2; // Don't convert
 }
@@ -655,6 +657,9 @@ static long ao_write(aoRecord *prec)
     } else if (strcasecmp(p->var, "SET_TIMEOUT") == 0) {
         slave->unimagCfg.setTimeoutS = prec->val;
         errlogPrintf("UNIMAG[%d]: set_timeout = %.1f s\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "INIT_TIMEOUT") == 0) {
+        slave->unimagCfg.initTimeoutS = prec->val;
+        errlogPrintf("UNIMAG[%d]: init_timeout = %.1f s\n", p->addr, prec->val);
     } else if (strcasecmp(p->var, "RETRY_DELAY") == 0) {
         slave->unimagCfg.retryDelay = prec->val;
         errlogPrintf("UNIMAG[%d]: retry_delay = %.1f s\n", p->addr, prec->val);
@@ -667,6 +672,34 @@ static long ao_write(aoRecord *prec)
         epicsMutexLock(drv->ioLock);
         unimag_setCurrentSP(slave, prec->val);
         epicsMutexUnlock(drv->ioLock);
+    } else if (strcasecmp(p->var, "CURRENT_TH") == 0) {
+        // Current threshold in Amperes
+        slave->currentThresholdA = prec->val;
+        errlogPrintf("UNIMAG[%d]: current_threshold = %.3f A\n", p->addr, prec->val);
+        // Send immediately if PRG is ready, otherwise will be sent when ready
+        if (slave->IMAX > 0 && slave->currentPrgH > 0) {
+            ocem_sendThreshold(slave, 0, prec->val);
+        }
+    } else if (strcasecmp(p->var, "VOLTAGE_TH") == 0) {
+        // Voltage threshold in Volts
+        slave->voltageThresholdV = prec->val;
+        errlogPrintf("UNIMAG[%d]: voltage_threshold = %.3f V\n", p->addr, prec->val);
+        // Send immediately if PRG is ready, otherwise will be sent when ready
+        if (slave->VMAX > 0 && slave->voltagePrgH > 0) {
+            ocem_sendThreshold(slave, 1, prec->val);
+        }
+    } else if (strcasecmp(p->var, "FORCE_STATE_QUERY_S") == 0) {
+        // Interval for forced state query (SL) when FIFO empty
+        slave->forceStateQueryS = prec->val;
+        // Initialize timestamp so first query happens after interval
+        epicsTimeGetCurrent(&slave->lastForceStateTime);
+        errlogPrintf("UNIMAG[%d]: force_state_query = %.0f s\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "FORCE_OPERATING_QUERY_S") == 0) {
+        // Interval for forced operating query (SA) when FIFO empty
+        slave->forceOperatingQueryS = prec->val;
+        // Initialize timestamp so first query happens after interval
+        epicsTimeGetCurrent(&slave->lastForceOperatingTime);
+        errlogPrintf("UNIMAG[%d]: force_operating_query = %.0f s\n", p->addr, prec->val);
     } else {
         errlogPrintf("ao_write: unknown var '%s'\n", p->var);
         return -1;
@@ -734,10 +767,26 @@ static long longin_read(longinRecord *prec)
         prec->val = (epicsInt32)slave->channelState;
     } else if (strcasecmp(p->var, "UNIMAG_BUSY") == 0) {
         prec->val = slave->unimag.busy ? 1 : 0;
+    } else if (strcasecmp(p->var, "HAS_ALARM") == 0) {
+        prec->val = slave->hasAlarm;
+    } else if (strcasecmp(p->var, "ALARM_MASK") == 0) {
+        prec->val = (epicsInt32)slave->alarmMask;
     } else if (strcasecmp(p->var, "MAX_RETRIES") == 0) {
         prec->val = slave->unimagCfg.maxRetries;
     } else if (strcasecmp(p->var, "RETRY_COUNT") == 0) {
         prec->val = slave->unimag.retryCount;
+    } else if (strcasecmp(p->var, "PRG_INIT") == 0) {
+        prec->val = slave->unimag.prgInitialized ? 1 : 0;
+    } else if (strcasecmp(p->var, "INI_CURMAX") == 0) {
+        prec->val = slave->currentPrgH;
+    } else if (strcasecmp(p->var, "INI_CURMIN") == 0) {
+        prec->val = slave->currentPrgL;
+    } else if (strcasecmp(p->var, "INI_VOLMAX") == 0) {
+        prec->val = slave->voltagePrgH;
+    } else if (strcasecmp(p->var, "INI_VOLMIN") == 0) {
+        prec->val = slave->voltagePrgL;
+    } else if (strcasecmp(p->var, "INTPOLA") == 0) {
+        prec->val = slave->integerPolarity;
     } else {
         return -1;
     }
@@ -749,11 +798,23 @@ static long longin_get_ioint_info(int cmd, longinRecord *prec, IOSCANPVT *ppvt) 
     ocemDpvt *p = (ocemDpvt*)prec->dpvt;
     if (!p) return -1;
     
+    errlogPrintf("li_get_ioint_info: %s %d\n", p->var, p->addr);
+    
     if (strcasecmp(p->var, "UNIMAG_STATE") == 0 ||
         strcasecmp(p->var, "CHANNEL_STATE") == 0 ||
         strcasecmp(p->var, "UNIMAG_BUSY") == 0 ||
-        strcasecmp(p->var, "RETRY_COUNT") == 0) {
+        strcasecmp(p->var, "RETRY_COUNT") == 0 ||
+        strcasecmp(p->var, "INTPOLA") == 0) {
         *ppvt = drv->slaves[p->addr].ioscanUnimag;
+    } else if (strcasecmp(p->var, "HAS_ALARM") == 0 ||
+               strcasecmp(p->var, "ALARM_MASK") == 0) {
+        *ppvt = drv->slaves[p->addr].ioscanAlarms;
+    } else if (strcasecmp(p->var, "PRG_INIT") == 0 ||
+               strcasecmp(p->var, "INI_CURMAX") == 0 ||
+               strcasecmp(p->var, "INI_CURMIN") == 0 ||
+               strcasecmp(p->var, "INI_VOLMAX") == 0 ||
+               strcasecmp(p->var, "INI_VOLMIN") == 0) {
+        *ppvt = drv->slaves[p->addr].ioscanInit;
     }
     return 0;
 }
@@ -883,10 +944,16 @@ static long ai_init_record(aiRecord *prec)
 static long ai_read(aiRecord *prec)
 {
     ocemDpvt *p = (ocemDpvt*)prec->dpvt;
-    if (!p || !drv) return -1;
+    if (!p || !drv) {
+        errlogPrintf("ai_read: NULL dpvt or drv\n");
+        return -1;
+    }
     
     OCEM_Slave* slave = findSlave(drv, p->addr);
-    if (!slave) return -1;
+    if (!slave) {
+        errlogPrintf("ai_read: findSlave(%d) returned NULL\n", p->addr);
+        return -1;
+    }
     
     if (strcasecmp(p->var, "CURRENT_RB_A") == 0) {
         prec->val = slave->currentRB;
@@ -900,10 +967,17 @@ static long ai_read(aiRecord *prec)
         prec->val = slave->unimagCfg.zeroTolerance;
     } else if (strcasecmp(p->var, "SET_TIMEOUT") == 0) {
         prec->val = slave->unimagCfg.setTimeoutS;
+    } else if (strcasecmp(p->var, "IMAX_RB") == 0) {
+        prec->val = slave->IMAX;
+    } else if (strcasecmp(p->var, "VMAX_RB") == 0) {
+        prec->val = slave->VMAX;
     } else {
         return -1;
     }
     
+    errlogPrintf("ai_read: %s addr=%d val=%.3f\n", p->var, p->addr, prec->val);
+    
+    prec->udf = 0;  // Clear undefined flag on successful read
     return 2; // Don't convert
 }
 
@@ -911,10 +985,15 @@ static long ai_get_ioint_info(int cmd, aiRecord *prec, IOSCANPVT *ppvt) {
     ocemDpvt *p = (ocemDpvt*)prec->dpvt;
     if (!p) return -1;
     
+    errlogPrintf("ai_get_ioint_info: %s %d\n", p->var, p->addr);
+    
     if (strcasecmp(p->var, "CURRENT_RB_A") == 0 ||
         strcasecmp(p->var, "CURRENT_SP_A") == 0 ||
         strcasecmp(p->var, "VOLTAGE_RB") == 0) {
         *ppvt = drv->slaves[p->addr].ioscanUnimag;
+    } else if (strcasecmp(p->var, "IMAX_RB") == 0 ||
+               strcasecmp(p->var, "VMAX_RB") == 0) {
+        *ppvt = drv->slaves[p->addr].ioscanInit;
     }
     return 0;
 }

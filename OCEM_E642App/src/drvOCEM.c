@@ -116,6 +116,21 @@ static void verifyCommandApplied(OCEM_Slave *slave)
     }
 }
 
+// Helper to strip trailing " **" or "*" from value strings
+static void stripTrailingStar(char *val) {
+    char *p = strstr(val, " **");
+    if (p) *p = '\0';
+    else {
+        p = strstr(val, " *");
+        if (p) *p = '\0';
+    }
+    // Also strip trailing whitespace
+    size_t len = strlen(val);
+    while (len > 0 && (val[len-1] == ' ' || val[len-1] == '\t' || val[len-1] == '\r' || val[len-1] == '\n')) {
+        val[--len] = '\0';
+    }
+}
+
 void ActivateInterrupt(int slaveId,char* cmd, char* val)
 {
             // trova slave corrispondente
@@ -150,13 +165,25 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         verifyCommandApplied(slave);
     }
     else if (strcmp(cmd, "COR") == 0) {
-        strncpy(slave->current, val, sizeof(slave->current));
+        // Strip trailing " **" suffix before storing
+        char cleanVal[40];
+        strncpy(cleanVal, val, sizeof(cleanVal) - 1);
+        cleanVal[sizeof(cleanVal)-1] = '\0';
+        stripTrailingStar(cleanVal);
+        
+        strncpy(slave->current, cleanVal, sizeof(slave->current));
         slave->current[sizeof(slave->current)-1] = '\0';
         scanIoRequest(slave->ioscanCurrent);
     }
     else if (strcmp(cmd, "TEN") == 0) 
     {
-        strncpy(slave->voltage, val, sizeof(slave->voltage));
+        // Strip trailing " **" suffix before storing
+        char cleanVal[40];
+        strncpy(cleanVal, val, sizeof(cleanVal) - 1);
+        cleanVal[sizeof(cleanVal)-1] = '\0';
+        stripTrailingStar(cleanVal);
+        
+        strncpy(slave->voltage, cleanVal, sizeof(slave->voltage));
         slave->voltage[sizeof(slave->voltage)-1] = '\0';
         scanIoRequest(slave->ioscanVoltage);
     }
@@ -175,11 +202,39 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
     }
     else if (strcmp(cmd, "ALL") == 0) 
     {
-        
+        // Store raw alarm string
         strncpy(slave->alarms, val, sizeof(slave->alarms));
         slave->alarms[sizeof(slave->alarms)-1] = '\0';
-        scanIoRequest(slave->ioscanAlarms);
         
+        // Parse alarm codes and build bitmask
+        // Format: "NO " or "NO" = no alarms, "01 03 24" = alarms 1, 3, 24 active
+        slave->alarmMask = 0;
+        slave->hasAlarm = 0;
+        
+        // Check for "NO" (no alarms)
+        if (strncasecmp(val, "NO", 2) != 0) {
+            // Parse space-separated alarm numbers
+            char *valCopy = strdup(val);
+            if (valCopy) {
+                char *saveptr = NULL;
+                char *token = strtok_r(valCopy, " ", &saveptr);
+                while (token) {
+                    int alarmNum = atoi(token);
+                    if (alarmNum > 0 && alarmNum <= 32) {
+                        slave->alarmMask |= (1U << (alarmNum - 1));
+                        slave->hasAlarm = 1;
+                    }
+                    token = strtok_r(NULL, " ", &saveptr);
+                }
+                free(valCopy);
+            }
+            if (slave->hasAlarm) {
+                OCEM_INFO("[PS%d] ALARMS active: %s (mask=0x%08X)\n", 
+                         slave->addr, val, slave->alarmMask);
+            }
+        }
+        
+        scanIoRequest(slave->ioscanAlarms);
     }
     else if (strcmp(cmd, "SEL") == 0) 
     {
@@ -194,6 +249,19 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         slave->selector[sizeof(slave->selector)-1] = '\0';
         scanIoRequest(slave->ioscanSelector);
     }
+    else if (strcmp(cmd, "VER") == 0)
+    {
+        // Store firmware version
+        strncpy(slave->version, val, sizeof(slave->version));
+        slave->version[sizeof(slave->version)-1] = '\0';
+        // Strip trailing whitespace
+        size_t len = strlen(slave->version);
+        while (len > 0 && (slave->version[len-1] == ' ' || slave->version[len-1] == '\r' || slave->version[len-1] == '\n')) {
+            slave->version[--len] = '\0';
+        }
+        OCEM_INFO("[PS%d] VER: '%s'\n", slaveId, slave->version);
+        scanIoRequest(slave->ioscanInit);  // Use init scan for version update
+    }
     else  if (strcmp(cmd, "PRG") == 0) 
     {
         int minvalue;int maxvalue;
@@ -203,6 +271,14 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
             slave->currentPrgH=maxvalue;
             scanIoRequest(slave->ioscanInit);
             errlogPrintf("CURRENT PRG: min : %d max %d\n",minvalue,maxvalue);
+            
+            // Check if PRG initialization is complete (both current and voltage ranges)
+            if (slave->currentPrgH > 0 && slave->voltagePrgH > 0 && slave->IMAX > 0) {
+                if (!slave->unimag.prgInitialized) {
+                    slave->unimag.prgInitialized = 1;
+                    OCEM_INFO("[PS%d] PRG initialization complete\n", slave->addr);
+                }
+            }
         }
         else if (parsePRGAnswer(val,"O1",&minvalue,&maxvalue) == 0)
         {
@@ -210,6 +286,14 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
             slave->voltagePrgH=maxvalue;
             scanIoRequest(slave->ioscanInit);
             errlogPrintf("VOLTAGE PRG:  min : %d max %d\n",minvalue,maxvalue);
+            
+            // Check if PRG initialization is complete (both current and voltage ranges)
+            if (slave->currentPrgH > 0 && slave->voltagePrgH > 0 && slave->IMAX > 0) {
+                if (!slave->unimag.prgInitialized) {
+                    slave->unimag.prgInitialized = 1;
+                    OCEM_INFO("[PS%d] PRG initialization complete\n", slave->addr);
+                }
+            }
         }
     }
 
@@ -326,22 +410,54 @@ void parseMultiReply(const char *input)
     char buffer[MAX_LINE];
     char cleaned[128];
     int i = 1;
+    size_t inputLen = strlen(input);
     
-    OCEM_TRACE("parseMultiReply: raw input (len=%zu): ", strlen(input));
+    OCEM_TRACE("parseMultiReply: raw input (len=%zu): ", inputLen);
     if (ocemDebugLevel >= 3) {
-        for (size_t k = 0; k < strlen(input) && k < 40; k++) {
+        for (size_t k = 0; k < inputLen && k < 40; k++) {
             OCEM_TRACE("%02X ", (unsigned char)input[k]);
         }
         OCEM_TRACE("\n");
     }
     
-    for (i = 1; i < strlen(input) - 2; ++i)
-    {
-        cleaned[i - 1] = input[i];
+    // Skip leading STX (0x02) if present
+    size_t startPos = 0;
+    if (inputLen > 0 && (unsigned char)input[0] == 0x02) {
+        startPos = 1;
     }
-    cleaned[i-1] = '\0';
     
-    OCEM_DETAIL("parseMultiReply: cleaned='%s'\n", cleaned);
+    // Find ETX (0x03) or end of valid data - stop at any STX in middle of message
+    size_t endPos = inputLen;
+    for (size_t k = startPos; k < inputLen; k++) {
+        unsigned char c = (unsigned char)input[k];
+        if (c == 0x03) {  // ETX - end of this message
+            endPos = k;
+            break;
+        }
+        if (k > startPos && c == 0x02) {  // STX in middle - data from another message mixed in
+            OCEM_DETAIL("parseMultiReply: found STX at pos %zu, truncating\n", k);
+            endPos = k;
+            break;
+        }
+    }
+    
+    // Copy clean portion
+    size_t cleanLen = 0;
+    for (i = startPos; i < endPos && cleanLen < sizeof(cleaned) - 1; i++) {
+        unsigned char c = (unsigned char)input[i];
+        // Skip control characters except CR/LF
+        if (c >= 0x20 || c == '\r' || c == '\n') {
+            cleaned[cleanLen++] = input[i];
+        }
+    }
+    cleaned[cleanLen] = '\0';
+    
+    if (cleanLen == 0) {
+        OCEM_DETAIL("parseMultiReply: no valid data after cleaning\n");
+        return;
+    }
+    
+    OCEM_DETAIL("parseMultiReply: cleaned='%s' (len=%zu)\n", cleaned, cleanLen);
     
     const char *ptr = cleaned;
     char lastSlaveChar = '@';  // <-- default to address 0 (0x40 = '@')
@@ -353,7 +469,6 @@ void parseMultiReply(const char *input)
             buffer[len++] = *ptr++;
         }
         buffer[len] = '\0';
-        //errlogPrintf("Buffer now:%s, len %d ",buffer,len);
 
         while (*ptr == '\n' || *ptr == '\r') ptr++;
         if (len == 0) continue;
@@ -363,23 +478,20 @@ void parseMultiReply(const char *input)
             strcpy(fullLine, buffer);
             firstLine = 0;
         } else {
-         // Prependiamo il singolo char dell'indirizzo salvato
-          //errlogPrintf("Prependo address %c",lastSlaveChar);
+            // Prepend the saved address character
             snprintf(fullLine, sizeof(fullLine), "%c%s", lastSlaveChar, buffer);
         }
 
         int slaveId;
         char cmd[32], val[32];
-        //errlogPrintf("FullLine to parse is %s\n",fullLine);
-        parseReplyString(fullLine, &slaveId, cmd, val);
-        
-        // Save address char if it's a valid poll address (0x40-0x5F) or select address (0x60-0x7F)
-        unsigned char fc = (unsigned char)fullLine[0];
-        if ((fc >= 0x40 && fc <= 0x5F) || (fc >= 0x60 && fc <= 0x7F))
-            lastSlaveChar = fullLine[0];
+        if (parseReplyString(fullLine, &slaveId, cmd, val) == 0) {
+            // Save address char if it's a valid poll address (0x40-0x5F) or select address (0x60-0x7F)
+            unsigned char fc = (unsigned char)fullLine[0];
+            if ((fc >= 0x40 && fc <= 0x5F) || (fc >= 0x60 && fc <= 0x7F))
+                lastSlaveChar = fullLine[0];
 
-        //errlogPrintf("-> SlaveID=%d | CMD=%s | VAL=%s\n", slaveId, cmd, val);
-        ActivateInterrupt(slaveId,cmd,val);
+            ActivateInterrupt(slaveId, cmd, val);
+        }
     }
 }
 
@@ -409,7 +521,9 @@ char* getNextCommandForSlave(OCEM_Slave* slave)
     else return "SA";
 }
 
-int select_request(OCEM_Driver* drv,OCEM_Slave* slave,char*response,size_t responseSize)
+// Send a select command (SL for state, SA for operating data)
+// If specificCmd is NULL, alternates between SL and SA
+int select_command(OCEM_Driver* drv, OCEM_Slave* slave, const char* specificCmd, char* response, size_t responseSize)
 {
      /*. Invia ENQ + address */
     unsigned char msg[32];
@@ -452,8 +566,8 @@ int select_request(OCEM_Driver* drv,OCEM_Slave* slave,char*response,size_t respo
         
     }
     /* 4. Prepara STX + addr + cmd + ETX + CDC */
-    char *cmd=getNextCommandForSlave(slave);
-    strcpy(slave->lastSelCommand,cmd);
+    const char *cmd = specificCmd ? specificCmd : getNextCommandForSlave(slave);
+    strncpy(slave->lastSelCommand, cmd, sizeof(slave->lastSelCommand) - 1);
     size_t cmdLen = strlen(cmd);
     msg[0] = 0x02; // STX
     msg[1] = (unsigned char) (slave->addr+0x60);
@@ -572,30 +686,37 @@ void checkCurrentSetStatus(OCEM_Slave* slave)
 {
     char response[128];
     size_t responseSize=128;
-    if (slave->IMAX <= 0)
+    
+    // Read IMAX and VMAX from linked records if not yet set
+    if (slave->IMAX <= 0 || slave->VMAX <= 0)
     {
         for (int i = 0; i < MAX_OCEM_RECORDS; i++)
         {
             ocemDpvt *p = ocem_records[i];
             if (!p) continue;
+            if (p->addr != slave->addr) continue;  // Only look at records for this slave
 
-            if (p->linkedAddr)
+            if (p->linkedAddr && p->linkedAddr->precord)
             {
-            double value = 0;
-                long status=0;
+                double value = 0;
+                long status = 0;
                 long options = 0;
                 long nreq = 1;
+                const char *recName = p->linkedAddr->precord->name;
 
-                status = dbGetField(p->linkedAddr, DBR_DOUBLE, &value,&options,&nreq,NULL);
+                status = dbGetField(p->linkedAddr, DBR_DOUBLE, &value, &options, &nreq, NULL);
                 
-                if (status == 0)
+                if (status == 0 && value > 0)
                 {
-                    
-                    slave->IMAX=value;
-                    printf( "IMAX :%f for address %d\n",slave->IMAX, slave->addr);
-                    
+                    // Check if this is an IMAX or VMAX record by name
+                    if (strstr(recName, "IMAX") != NULL && slave->IMAX <= 0) {
+                        slave->IMAX = value;
+                        OCEM_INFO("[PS%d] IMAX set to %.1f A\n", slave->addr, slave->IMAX);
+                    } else if (strstr(recName, "VMAX") != NULL && slave->VMAX <= 0) {
+                        slave->VMAX = value;
+                        OCEM_INFO("[PS%d] VMAX set to %.1f V\n", slave->addr, slave->VMAX);
+                    }
                 }
-
             }
         }
     }
@@ -837,10 +958,12 @@ static const char* getCmdStateName(CmdState state)
 const char* unimag_getStateName(UnimagState state)
 {
     switch(state) {
+        case UNIMAG_INIT:        return "INIT";
         case UNIMAG_OK:          return "OK";
         case UNIMAG_NOT_REACHED: return "NOT_REACHED";
         case UNIMAG_ZERO_STBY:   return "ZERO_STBY";
         case UNIMAG_CHANGE_POL:  return "CHANGE_POL";
+        case UNIMAG_WAIT_POL:    return "WAIT_POL";
         case UNIMAG_GOING_TO_SET: return "GOING_TO_SET";
         default:                 return "UNKNOWN";
     }
@@ -865,22 +988,82 @@ void unimag_init(OCEM_Slave *slave)
     slave->unimagCfg.setTolerance = 1.0;    // 1A tolerance
     slave->unimagCfg.zeroTolerance = 1.0;   // 1A for zero
     slave->unimagCfg.setTimeoutS = 10.0;    // 10 second timeout
+    slave->unimagCfg.initTimeoutS = 60.0;   // 60 second init timeout
     slave->unimagCfg.maxRetries = 3;        // 3 retries
     slave->unimagCfg.retryDelay = 1.0;      // 1s between retries
     
-    // Initial state
+    // Start in OK state since default PRG values are already set
+    // PRG data from polling will update the values but calculation can start immediately
     slave->unimag.state = UNIMAG_OK;
     slave->unimag.busy = 0;
     slave->unimag.retryCount = 0;
     slave->unimag.targetCurrent = 0.0;
     slave->unimag.targetPolarity = 0;
     slave->unimag.targetState = CH_OFF;
-    strcpy(slave->unimag.statusMsg, "Ready");
+    slave->unimag.prgInitialized = 1;  // Defaults are set, consider initialized
+    epicsTimeGetCurrent(&slave->unimag.initStartTime);
+    strcpy(slave->unimag.statusMsg, "Ready (using default PRG values)");
     
     slave->channelState = CH_OFF;
     slave->currentRB = 0.0;
     slave->voltageRB = 0.0;
     slave->currentSP = 0.0;
+    
+    // Threshold defaults: will be set to 5% of IMAX/VMAX when those are known
+    // -1 means "use default when IMAX/VMAX become available"
+    slave->currentThresholdA = -1.0;
+    slave->voltageThresholdV = -1.0;
+    slave->thresholdsSent = 0;
+}
+
+// Send threshold command to PS
+// channel: 0 = current (I0), 1 = voltage (I1)
+// valueA: threshold value in Amperes (for I0) or Volts (for I1)
+// Returns 0 on success, -1 on error
+int ocem_sendThreshold(OCEM_Slave *slave, int channel, double value)
+{
+    if (!slave || !drv) return -1;
+    
+    char response[128];
+    size_t responseSize = sizeof(response);
+    
+    // Convert to raw units
+    int rawValue = 0;
+    if (channel == 0) {
+        // Current threshold: convert Amperes to raw bits
+        if (slave->currentPrgH <= 0 || slave->IMAX <= 0) {
+            OCEM_ERR("[PS%d] Cannot send current threshold - PRG not initialized\n", slave->addr);
+            return -1;
+        }
+        rawValue = (int)((value * slave->currentPrgH) / slave->IMAX);
+    } else if (channel == 1) {
+        // Voltage threshold: convert Volts to raw bits
+        if (slave->voltagePrgH <= 0 || slave->VMAX <= 0) {
+            OCEM_ERR("[PS%d] Cannot send voltage threshold - PRG not initialized\n", slave->addr);
+            return -1;
+        }
+        rawValue = (int)((value * slave->voltagePrgH) / slave->VMAX);
+    } else {
+        OCEM_ERR("[PS%d] Invalid threshold channel %d\n", slave->addr, channel);
+        return -1;
+    }
+    
+    // Clamp to valid range (6 digits max = 999999)
+    if (rawValue < 0) rawValue = 0;
+    if (rawValue > 999999) rawValue = 999999;
+    
+    // Format TH command: "TH I<channel> <6-digit value>"
+    char cmd[20];
+    snprintf(cmd, sizeof(cmd), "TH I%d %06d", channel, rawValue);
+    
+    OCEM_INFO("[PS%d] Sending threshold: %s (%.3f %s)\n", 
+              slave->addr, cmd, value, channel == 0 ? "A" : "V");
+    
+    epicsMutexLock(drv->ioLock);
+    send_command(drv, slave->addr, cmd, response, responseSize);
+    epicsMutexUnlock(drv->ioLock);
+    
+    return 0;
 }
 
 // Helper to set UNIMAG state and notify
@@ -931,25 +1114,102 @@ static void unimag_updateCurrentRB(OCEM_Slave *slave)
     slave->currentRB *= slave->integerPolarity;  // Apply sign based on polarity
 }
 
-// Check if timeout has expired
+// Check if current is moving toward target
+// Returns: 1 if moving toward target, 0 if stalled
+static int unimag_isProgressing(OCEM_Slave *slave)
+{
+    double absCurrent = fabs(slave->currentRB);
+    double absTarget = fabs(slave->unimag.targetCurrent);
+    double lastAbs = fabs(slave->unimag.lastCurrentRB);
+    double errorNow = fabs(absCurrent - absTarget);
+    double errorLast = fabs(lastAbs - absTarget);
+    
+    // If error has decreased (moving toward target), we're progressing
+    // Use a small threshold to avoid noise triggering false positives
+    double progressThreshold = 0.01; // 10mA minimum movement
+    if (errorLast - errorNow > progressThreshold) {
+        return 1;
+    }
+    return 0;
+}
+
+// Update progress tracking and check if timeout has expired
+// Timeout only counts when current is NOT moving toward target
 static int unimag_isTimeout(OCEM_Slave *slave)
 {
     epicsTimeStamp now;
     epicsTimeGetCurrent(&now);
-    double elapsed = epicsTimeDiffInSeconds(&now, &slave->unimag.stepStartTime);
+    
+    // Check if we're making progress
+    if (unimag_isProgressing(slave)) {
+        // Reset timeout timer when progressing
+        epicsTimeGetCurrent(&slave->unimag.lastProgressTime);
+        OCEM_DETAIL("[PS%d] UNIMAG: Progress detected, resetting timeout\n", slave->addr);
+    }
+    
+    // Update last current for next progress check
+    slave->unimag.lastCurrentRB = slave->currentRB;
+    
+    // Timeout based on last progress time, not step start time
+    double elapsed = epicsTimeDiffInSeconds(&now, &slave->unimag.lastProgressTime);
     return (elapsed >= slave->unimagCfg.setTimeoutS);
 }
 
-// Start timer for current step
+// Start timer for current step and initialize progress tracking
 static void unimag_startTimer(OCEM_Slave *slave)
 {
     epicsTimeGetCurrent(&slave->unimag.stepStartTime);
+    epicsTimeGetCurrent(&slave->unimag.lastProgressTime);
+    slave->unimag.lastCurrentRB = slave->currentRB;
+}
+
+// Helper to send SP and STR commands for current setpoint
+// Returns 0 on success, -1 if PRG parameters not yet available
+static int unimag_sendSetpointCmd(OCEM_Slave *slave, double currentA)
+{
+    char response[128];
+    size_t responseSize = sizeof(response);
+    
+    // Check if PRG parameters are valid
+    if (slave->currentPrgH <= 0 || slave->IMAX <= 0) {
+        OCEM_ERR("[PS%d] UNIMAG: Cannot send setpoint - PRG not initialized (currentPrgH=%d, IMAX=%.1f)\n",
+                   slave->addr, slave->currentPrgH, slave->IMAX);
+        return -1;
+    }
+    
+    // Convert Amperes to raw bits (always positive)
+    int rawBits = ampereInBits(fabs(currentA), slave);
+    
+    // Format SP command with 7-digit value
+    char spCmd[16];
+    snprintf(spCmd, sizeof(spCmd), "SP %07d", rawBits);
+    
+    // send_command already logs the command
+    send_command(drv, slave->addr, spCmd, response, responseSize);
+    send_command(drv, slave->addr, "STR", response, responseSize);
+    
+    return 0;
 }
 
 // Set current setpoint and start state machine
 void unimag_setCurrentSP(OCEM_Slave *slave, double currentA)
 {
     OCEM_INFO("[PS%d] UNIMAG: New setpoint request: %.3f A\n", slave->addr, currentA);
+    
+    // Check if still in INIT state
+    if (slave->unimag.state == UNIMAG_INIT) {
+        OCEM_ERR("[PS%d] UNIMAG: Rejected - still initializing, wait for PRG data\n", slave->addr);
+        // Don't change state, just log and return
+        return;
+    }
+    
+    // Check if PRG parameters are ready before accepting command
+    if (slave->currentPrgH <= 0 || slave->IMAX <= 0 || !slave->unimag.prgInitialized) {
+        OCEM_ERR("[PS%d] UNIMAG: Rejected - PRG parameters not initialized\n", slave->addr);
+        unimag_setState(slave, UNIMAG_NOT_REACHED, "PRG not initialized - wait for init");
+        scanIoRequest(slave->ioscanUnimag);
+        return;
+    }
     
     slave->currentSP = currentA;
     slave->unimag.targetCurrent = currentA;
@@ -963,11 +1223,15 @@ void unimag_setCurrentSP(OCEM_Slave *slave, double currentA)
     // Check if polarity change is needed
     if (slave->unimag.targetPolarity != 0 && 
         slave->unimag.targetPolarity != slave->integerPolarity) {
-        // Need polarity change - first go to zero
+        // Need polarity change - first go to zero, then change polarity
         unimag_setState(slave, UNIMAG_ZERO_STBY, "Ramping to zero for polarity change");
+        // Send SP 0 and STR to start ramping to zero
+        unimag_sendSetpointCmd(slave, 0.0);
     } else {
         // Same polarity or zero - go directly to setpoint
         unimag_setState(slave, UNIMAG_GOING_TO_SET, "Ramping to setpoint");
+        // Send SP and STR to start ramping
+        unimag_sendSetpointCmd(slave, currentA);
     }
     
     scanIoRequest(slave->ioscanUnimag);
@@ -1000,6 +1264,8 @@ void unimag_setStateSP(OCEM_Slave *slave, ChannelState state)
 }
 
 // Process UNIMAG state machine (called from polling loop)
+// SIMPLIFIED: No retry logic - if timeout occurs, report failure immediately
+// Retries at this level mask underlying communication issues
 void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
 {
     char response[128];
@@ -1008,6 +1274,56 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
     // Update calculated values
     unimag_updateChannelState(slave);
     unimag_updateCurrentRB(slave);
+    
+    // Always trigger I/O Intr for UNIMAG PVs (CURRENT_RB, VOLTAGE_RB, etc.)
+    // This MUST be done BEFORE any early returns so PVs update on every poll
+    OCEM_DETAIL("[PS%d] Triggering ioscanUnimag (currentRB=%.3f)\n", slave->addr, slave->currentRB);
+    scanIoRequest(slave->ioscanUnimag);
+    
+    // Send thresholds when IMAX/VMAX become available (one-time)
+    if (!slave->thresholdsSent && slave->IMAX > 0 && slave->VMAX > 0 &&
+        slave->currentPrgH > 0 && slave->voltagePrgH > 0) {
+        
+        // Set defaults if not configured (5% of max)
+        if (slave->currentThresholdA < 0) {
+            slave->currentThresholdA = slave->IMAX * 0.05;
+        }
+        if (slave->voltageThresholdV < 0) {
+            slave->voltageThresholdV = slave->VMAX * 0.05;
+        }
+        
+        // Send threshold commands
+        ocem_sendThreshold(slave, 0, slave->currentThresholdA);
+        ocem_sendThreshold(slave, 1, slave->voltageThresholdV);
+        slave->thresholdsSent = 1;
+        
+        OCEM_INFO("[PS%d] Thresholds initialized: current=%.3fA, voltage=%.3fV\n",
+                  slave->addr, slave->currentThresholdA, slave->voltageThresholdV);
+    }
+    
+    // Handle INIT state - check for PRG initialization
+    if (slave->unimag.state == UNIMAG_INIT) {
+        if (slave->unimag.prgInitialized) {
+            // PRG data received - transition to OK
+            unimag_setState(slave, UNIMAG_OK, "Initialization complete");
+            slave->unimag.busy = 0;
+        } else {
+            // Check for init timeout
+            epicsTimeStamp now;
+            epicsTimeGetCurrent(&now);
+            double elapsed = epicsTimeDiffInSeconds(&now, &slave->unimag.initStartTime);
+            
+            if (elapsed >= slave->unimagCfg.initTimeoutS) {
+                // Timeout - retry initialization by re-sending PRG S command
+                OCEM_INFO("[PS%d] UNIMAG: Init timeout (%.0fs), retrying PRG S\n", 
+                          slave->addr, elapsed);
+                send_command(drv, slave->addr, "RMT", response, responseSize);
+                // Reset timer for next timeout
+                epicsTimeGetCurrent(&slave->unimag.initStartTime);
+            }
+        }
+        return;  // Don't process other states while in INIT
+    }
     
     // If not busy, nothing to do
     if (!slave->unimag.busy) {
@@ -1018,6 +1334,10 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
     double absTargetCurrent = fabs(slave->unimag.targetCurrent);
     
     switch (slave->unimag.state) {
+        case UNIMAG_INIT:
+            // Handled above, should not reach here
+            break;
+            
         case UNIMAG_OK:
             // Reached OK state - done
             slave->unimag.busy = 0;
@@ -1034,70 +1354,55 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
                 // Zero reached - check what's next
                 if (slave->unimag.targetPolarity != 0 && 
                     slave->unimag.targetPolarity != slave->integerPolarity) {
-                    // Need polarity change
+                    // Need polarity change - first go to STANDBY
                     unimag_startTimer(slave);
-                    slave->unimag.retryCount = 0;
-                    unimag_setState(slave, UNIMAG_CHANGE_POL, "Changing polarity");
-                    
-                    // Send polarity command
-                    const char *polCmd = (slave->unimag.targetPolarity > 0) ? "POS" : "NEG";
-                    send_command(drv, slave->addr, (char*)polCmd, response, responseSize);
+                    unimag_setState(slave, UNIMAG_CHANGE_POL, "Going to STANDBY for polarity change");
+                    send_command(drv, slave->addr, "STB", response, responseSize);
                 } else if (slave->unimag.targetState == CH_STANDBY) {
                     // Transition to STANDBY complete
                     send_command(drv, slave->addr, "STB", response, responseSize);
                     unimag_setState(slave, UNIMAG_OK, "Reached STANDBY");
                     slave->unimag.busy = 0;
                 } else {
-                    // Go to setpoint
+                    // Go to setpoint - send SP and STR commands
                     unimag_startTimer(slave);
-                    slave->unimag.retryCount = 0;
                     unimag_setState(slave, UNIMAG_GOING_TO_SET, "Ramping to setpoint");
+                    unimag_sendSetpointCmd(slave, slave->unimag.targetCurrent);
                 }
             } else if (unimag_isTimeout(slave)) {
-                // Timeout - retry or fail
-                slave->unimag.retryCount++;
-                if (slave->unimag.retryCount > slave->unimagCfg.maxRetries) {
-                    unimag_setState(slave, UNIMAG_NOT_REACHED, "Failed: Zero not reached");
-                    slave->unimag.busy = 0;
-                } else {
-                    // Retry: send zero setpoint again
-                    OCEM_INFO("[PS%d] UNIMAG: Retry %d/%d for zero\n", 
-                             slave->addr, slave->unimag.retryCount, slave->unimagCfg.maxRetries);
-                    send_command(drv, slave->addr, "SP 0000000", response, responseSize);
-                    send_command(drv, slave->addr, "STR", response, responseSize);
-                    unimag_startTimer(slave);
-                    snprintf(slave->unimag.statusMsg, sizeof(slave->unimag.statusMsg),
-                             "Retry %d: Ramping to zero", slave->unimag.retryCount);
-                }
+                // Timeout - fail immediately (no retries)
+                char msg[80];
+                snprintf(msg, sizeof(msg), "Failed: Zero not reached (current=%.2fA) tolerance %.2fA", absCurrentRB, slave->unimagCfg.zeroTolerance);
+                unimag_setState(slave, UNIMAG_NOT_REACHED, msg);
+                slave->unimag.busy = 0;
             }
             break;
             
         case UNIMAG_CHANGE_POL:
-            // Waiting for polarity change
-            if (slave->integerPolarity == slave->unimag.targetPolarity) {
-                // Polarity changed successfully
+            // Waiting for STANDBY status before sending polarity command
+            if (slave->channelState == CH_STANDBY) {
+                // In STANDBY - now send polarity command
                 unimag_startTimer(slave);
-                slave->unimag.retryCount = 0;
-                
-                // Now go ON and ramp to setpoint
+                const char *polCmd = (slave->unimag.targetPolarity > 0) ? "POS" : "NEG";
+                send_command(drv, slave->addr, (char*)polCmd, response, responseSize);
+                unimag_setState(slave, UNIMAG_WAIT_POL, "Waiting for polarity change");
+            } else if (unimag_isTimeout(slave)) {
+                unimag_setState(slave, UNIMAG_NOT_REACHED, "Failed: STANDBY not reached for polarity change");
+                slave->unimag.busy = 0;
+            }
+            break;
+            
+        case UNIMAG_WAIT_POL:
+            // Waiting for polarity change to complete
+            if (slave->integerPolarity == slave->unimag.targetPolarity) {
+                // Polarity changed successfully - now go ON and ramp to setpoint
+                unimag_startTimer(slave);
                 send_command(drv, slave->addr, "ON", response, responseSize);
                 unimag_setState(slave, UNIMAG_GOING_TO_SET, "Ramping to setpoint");
+                unimag_sendSetpointCmd(slave, slave->unimag.targetCurrent);
             } else if (unimag_isTimeout(slave)) {
-                // Timeout - retry or fail
-                slave->unimag.retryCount++;
-                if (slave->unimag.retryCount > slave->unimagCfg.maxRetries) {
-                    unimag_setState(slave, UNIMAG_NOT_REACHED, "Failed: Polarity change failed");
-                    slave->unimag.busy = 0;
-                } else {
-                    // Retry polarity change
-                    OCEM_INFO("[PS%d] UNIMAG: Retry %d/%d for polarity\n",
-                             slave->addr, slave->unimag.retryCount, slave->unimagCfg.maxRetries);
-                    const char *polCmd = (slave->unimag.targetPolarity > 0) ? "POS" : "NEG";
-                    send_command(drv, slave->addr, (char*)polCmd, response, responseSize);
-                    unimag_startTimer(slave);
-                    snprintf(slave->unimag.statusMsg, sizeof(slave->unimag.statusMsg),
-                             "Retry %d: Changing polarity", slave->unimag.retryCount);
-                }
+                unimag_setState(slave, UNIMAG_NOT_REACHED, "Failed: Polarity change failed");
+                slave->unimag.busy = 0;
             }
             break;
             
@@ -1115,29 +1420,11 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
                     unimag_setState(slave, UNIMAG_OK, "Setpoint reached");
                     slave->unimag.busy = 0;
                 } else if (unimag_isTimeout(slave)) {
-                    // Timeout - retry or fail
-                    slave->unimag.retryCount++;
-                    if (slave->unimag.retryCount > slave->unimagCfg.maxRetries) {
-                        char msg[80];
-                        snprintf(msg, sizeof(msg), "Failed: Setpoint not reached (err=%.2fA)", error);
-                        unimag_setState(slave, UNIMAG_NOT_REACHED, msg);
-                        slave->unimag.busy = 0;
-                    } else {
-                        // Retry: send setpoint again
-                        OCEM_INFO("[PS%d] UNIMAG: Retry %d/%d for setpoint\n",
-                                 slave->addr, slave->unimag.retryCount, slave->unimagCfg.maxRetries);
-                        
-                        // Calculate and send setpoint
-                        int bits = (int)((absTargetCurrent * slave->currentPrgH) / slave->IMAX);
-                        char spCmd[20];
-                        snprintf(spCmd, sizeof(spCmd), "SP %07d", bits);
-                        send_command(drv, slave->addr, spCmd, response, responseSize);
-                        send_command(drv, slave->addr, "STR", response, responseSize);
-                        
-                        unimag_startTimer(slave);
-                        snprintf(slave->unimag.statusMsg, sizeof(slave->unimag.statusMsg),
-                                 "Retry %d: Ramping to %.2fA", slave->unimag.retryCount, absTargetCurrent);
-                    }
+                    // Timeout - fail immediately (no retries)
+                    char msg[80];
+                    snprintf(msg, sizeof(msg), "Failed: Setpoint not reached (err=%.2fA)", error);
+                    unimag_setState(slave, UNIMAG_NOT_REACHED, msg);
+                    slave->unimag.busy = 0;
                 }
             }
             break;
@@ -1150,21 +1437,19 @@ static void ocem_polling(void *arg) {
     char response[128];
     size_t responseSize=128;
     epicsThreadSleep(0.1);
-    
+    OCEM_INFO("Debug level: %d (0=errors, 1=info, 2=detail, 3=trace)\n", ocemDebugLevel);
+
     OCEM_INFO("Initializing %d power supplies...\n", drv->nSlaves);
     
     for (int i=0; i < drv->nSlaves;i++)
     {
         OCEM_INFO("[PS%d] Sending RMT (remote mode)\n", drv->addrList[i]);
         send_command(drv,drv->addrList[i],"RMT",response,responseSize);
-        epicsThreadSleep(0.05);
-        OCEM_INFO("[PS%d] Sending PRG S (read parameters)\n", drv->addrList[i]);
-        send_command(drv,drv->addrList[i],"PRG S",response,responseSize);
+        // PRG data will be received via polling - defaults are already set
     }
     
     printf("OCEM Polling started - Idle: %.2fs, Active: %.2fs, Timeout: %.2fs\n",
            drv->idlePollingPeriod, drv->activePollingPeriod, drv->commandActiveTimeout);
-    OCEM_INFO("Debug level: %d (0=errors, 1=info, 2=detail, 3=trace)\n", ocemDebugLevel);
     
     int cycleCount = 0;
     
@@ -1212,15 +1497,46 @@ static void ocem_polling(void *arg) {
                 }
                 else if (ret == 1)
                 {
-                    OCEM_DETAIL("[PS%d] FIFO empty, doing select\n", slave->addr);
-                    select_request(drv, slave, response, responseSize);
-                    epicsThreadSleep(0.05);
+                    // FIFO empty - check if periodic forced queries are needed
+                    epicsTimeStamp now;
+                    epicsTimeGetCurrent(&now);
+                    int didQuery = 0;
+                    
+                    // Check if SL (state) query is due
+                    if (slave->forceStateQueryS > 0) {
+                        double elapsed = epicsTimeDiffInSeconds(&now, &slave->lastForceStateTime);
+                        if (elapsed >= slave->forceStateQueryS) {
+                            OCEM_INFO("[PS%d] Forced SL query (%.0fs elapsed)\n", slave->addr, elapsed);
+                            select_command(drv, slave, "SL", response, responseSize);
+                            slave->lastForceStateTime = now;
+                            didQuery = 1;
+                        }
+                    }
+                    
+                    // Check if SA (operating) query is due (only if we didn't just do SL)
+                    if (!didQuery && slave->forceOperatingQueryS > 0) {
+                        double elapsed = epicsTimeDiffInSeconds(&now, &slave->lastForceOperatingTime);
+                        if (elapsed >= slave->forceOperatingQueryS) {
+                            OCEM_INFO("[PS%d] Forced SA query (%.0fs elapsed)\n", slave->addr, elapsed);
+                            select_command(drv, slave, "SA", response, responseSize);
+                            slave->lastForceOperatingTime = now;
+                            didQuery = 1;
+                        }
+                    }
+                    
+                    if (!didQuery) {
+                        OCEM_DETAIL("[PS%d] FIFO empty\n", slave->addr);
+                    }
                 }
                 
                 // Process UNIMAG state machine
                 unimag_process(drv, slave);
                 
                 epicsMutexUnlock(drv->ioLock);
+                
+                // Inter-slave delay to prevent RS485 bus collisions
+                // Critical for multi-slave setups - allows bus to settle
+                epicsThreadSleep(0.08);
             }
         }
         
@@ -1233,13 +1549,12 @@ static void ocem_polling(void *arg) {
 
 
 /* --- Inizializzazione driver --- */
-static void ocem_init(const char *port, int nSlaves, const char *addrListStr) {
+static void ocem_init(const char *port, const char *addrListStr) {
     drv = calloc(1, sizeof(OCEM_Driver));
     drv->pollingPeriodParam = -1;
     
     
     drv->port = strdup(port);
-    drv->nSlaves = nSlaves;
     drv->running = 1;
     // Default polling rates
     drv->idlePollingPeriod = 1.0;     // 1s when idle (just monitoring)
@@ -1259,7 +1574,12 @@ static void ocem_init(const char *port, int nSlaves, const char *addrListStr) {
     drv->cmdQueueHead = NULL;
     drv->cmdQueueTail = NULL;
  // srand(time(NULL));
-    parseIntList(addrListStr,addrList, MAX_SLAVE);
+    int nSlaves = parseIntList(addrListStr, addrList, MAX_SLAVE);
+    if (nSlaves <= 0) {
+        errlogPrintf("ocemInit: no valid addresses in list '%s'\n", addrListStr ? addrListStr : "(null)");
+        return;
+    }
+    drv->nSlaves = nSlaves;
     for(int i=0; i<nSlaves; i++) 
     {
         int addr = addrList[i];
@@ -1273,7 +1593,16 @@ static void ocem_init(const char *port, int nSlaves, const char *addrListStr) {
         drv->slaves[addr].addr = addr;
         drv->slaves[addr].IMAX = -1;
         drv->slaves[addr].VMAX = -1;
-        drv->slaves[addr].currentPrgH=0;
+        
+        // Set default PRG values so current/voltage can be calculated immediately
+        // These will be updated when actual PRG data is received from polling
+        // I0=65535 (current input), I1=255 (voltage input), I2-I4=0 (unused)
+        // O0=65535 (current setpoint), O1=4095 (rampup), O2=4095 (rampdown), O3-O4=0
+        drv->slaves[addr].currentPrgL = 0;
+        drv->slaves[addr].currentPrgH = 65535;  // Default I0/O0 max
+        drv->slaves[addr].voltagePrgL = 0;
+        drv->slaves[addr].voltagePrgH = 4095;   // Default O1 max (ramp)
+        
         drv->slaves[addr].hasPendingCommand = 0;
         drv->slaves[addr].Ostate = STATE_IDLE;
         drv->slaves[addr].cmdState = CMD_IDLE;
@@ -1332,13 +1661,12 @@ static void ocem_init(const char *port, int nSlaves, const char *addrListStr) {
 
 /* --- IOC shell command --- */
 static const iocshArg initArg0 = {"port", iocshArgString};
-static const iocshArg initArg1 = {"nSlaves", iocshArgInt};
-static const iocshArg initArg2 = {"addrListStr", iocshArgString};
-static const iocshArg *initArgs[3] = {&initArg0, &initArg1,&initArg2};
-static const iocshFuncDef initFuncDef = {"ocemInit", 3, initArgs};
+static const iocshArg initArg1 = {"addrListStr", iocshArgString};
+static const iocshArg *initArgs[2] = {&initArg0, &initArg1};
+static const iocshFuncDef initFuncDef = {"ocemInit", 2, initArgs};
 static void initCall(const iocshArgBuf *args) {
-    //printf("initCall ha ricevuto %s",args[2].sval)
-    ocem_init(args[0].sval, args[1].ival, args[2].sval);
+    //printf("initCall ha ricevuto %s",args[1].sval)
+    ocem_init(args[0].sval, args[1].sval);
 }
 
 /* --- Set polling rates command --- */
