@@ -7,12 +7,8 @@
     <color red="235" green="235" blue="235">
     </color>
   </background_color>
-  
-  <!-- Header -->
   <widget type="rectangle" version="2.0.0">
     <name>Header</name>
-    <x>0</x>
-    <y>0</y>
     <width>750</width>
     <height>70</height>
     <line_color>
@@ -46,7 +42,6 @@
     <x>550</x>
     <y>25</y>
     <width>180</width>
-    <height>20</height>
     <font>
       <font family="Liberation Mono" style="REGULAR" size="12.0">
       </font>
@@ -57,14 +52,11 @@
     </foreground_color>
     <horizontal_alignment>2</horizontal_alignment>
   </widget>
-
-  <!-- Column Headers -->
   <widget type="label" version="2.0.0">
     <name>DeviceCol</name>
     <text>Device</text>
     <x>30</x>
     <y>85</y>
-    <width>100</width>
     <height>25</height>
     <font>
       <font family="Liberation Sans" style="BOLD" size="14.0">
@@ -96,7 +88,6 @@
     <text>Status</text>
     <x>200</x>
     <y>85</y>
-    <width>100</width>
     <height>25</height>
     <font>
       <font family="Liberation Sans" style="BOLD" size="14.0">
@@ -140,8 +131,6 @@
     </foreground_color>
     <horizontal_alignment>1</horizontal_alignment>
   </widget>
-  
-  <!-- Separator line -->
   <widget type="rectangle" version="2.0.0">
     <name>Separator</name>
     <x>20</x>
@@ -157,14 +146,11 @@
       </color>
     </background_color>
   </widget>
-
-  <!-- QUATB102 Row -->
   <widget type="label" version="2.0.0">
     <name>Dev1Name</name>
     <text>QUATB102</text>
     <x>30</x>
     <y>130</y>
-    <width>100</width>
     <height>35</height>
     <font>
       <font family="Liberation Sans" style="BOLD" size="14.0">
@@ -190,7 +176,6 @@
     <pv_name>BTF:MAG:OCEME642:QUATB102:Status</pv_name>
     <x>200</x>
     <y>133</y>
-    <width>100</width>
     <height>30</height>
     <background_color>
       <color red="220" green="220" blue="220">
@@ -206,12 +191,12 @@
     <y>133</y>
     <width>80</width>
     <height>30</height>
-    <format>1</format>
-    <precision>2</precision>
     <background_color>
       <color red="230" green="240" blue="250">
       </color>
     </background_color>
+    <format>1</format>
+    <precision>2</precision>
     <horizontal_alignment>2</horizontal_alignment>
     <vertical_alignment>1</vertical_alignment>
   </widget>
@@ -232,6 +217,7 @@
     <name>Dev1Unimag</name>
     <actions>
       <action type="open_display">
+        <description>UNIMAG Interface</description>
         <file>OCEM_unimag_v2.bob</file>
         <macros>
           <P>BTF:MAG:OCEME642</P>
@@ -240,50 +226,47 @@
           <VMAX>25</VMAX>
         </macros>
         <target>window</target>
-        <description>UNIMAG Interface</description>
       </action>
     </actions>
     <text>UNIMAG</text>
     <x>440</x>
     <y>130</y>
-    <width>100</width>
     <height>35</height>
-    <background_color>
-      <color red="0" green="180" blue="0">
-      </color>
-    </background_color>
     <foreground_color>
       <color red="255" green="255" blue="255">
       </color>
     </foreground_color>
+    <background_color>
+      <color red="0" green="180" blue="0">
+      </color>
+    </background_color>
     <tooltip>Open UNIMAG-style control panel</tooltip>
   </widget>
   <widget type="action_button" version="3.0.0">
     <name>Dev1Serial</name>
     <actions>
       <action type="open_display">
+        <description>Serial Debug Interface</description>
         <file>OCEM_serial_v2.bob</file>
         <macros>
           <P>BTF:MAG:OCEME642</P>
           <R>QUATB102</R>
         </macros>
         <target>window</target>
-        <description>Serial Debug Interface</description>
       </action>
     </actions>
     <text>Serial Debug</text>
     <x>550</x>
     <y>130</y>
-    <width>100</width>
     <height>35</height>
-    <background_color>
-      <color red="100" green="100" blue="150">
-      </color>
-    </background_color>
     <foreground_color>
       <color red="255" green="255" blue="255">
       </color>
     </foreground_color>
+    <background_color>
+      <color red="100" green="100" blue="150">
+      </color>
+    </background_color>
     <tooltip>Open Serial debug panel</tooltip>
   </widget>
   <widget type="led" version="2.0.0">
@@ -291,17 +274,12 @@
     <pv_name>BTF:MAG:OCEME642:QUATB102:Status</pv_name>
     <x>665</x>
     <y>138</y>
-    <width>20</width>
-    <height>20</height>
   </widget>
-
-  <!-- QUATM001 Row -->
   <widget type="label" version="2.0.0">
     <name>Dev2Name</name>
     <text>QUATM001</text>
     <x>30</x>
     <y>180</y>
-    <width>100</width>
     <height>35</height>
     <font>
       <font family="Liberation Sans" style="BOLD" size="14.0">
@@ -327,7 +305,6 @@
     <pv_name>BTF:MAG:OCEME642:QUATM001:Status</pv_name>
     <x>200</x>
     <y>183</y>
-    <width>100</width>
     <height>30</height>
     <background_color>
       <color red="220" green="220" blue="220">
@@ -343,12 +320,12 @@
     <y>183</y>
     <width>80</width>
     <height>30</height>
-    <format>1</format>
-    <precision>2</precision>
     <background_color>
       <color red="230" green="240" blue="250">
       </color>
     </background_color>
+    <format>1</format>
+    <precision>2</precision>
     <horizontal_alignment>2</horizontal_alignment>
     <vertical_alignment>1</vertical_alignment>
   </widget>
@@ -369,6 +346,7 @@
     <name>Dev2Unimag</name>
     <actions>
       <action type="open_display">
+        <description>UNIMAG Interface</description>
         <file>OCEM_unimag_v2.bob</file>
         <macros>
           <P>BTF:MAG:OCEME642</P>
@@ -377,50 +355,47 @@
           <VMAX>25</VMAX>
         </macros>
         <target>window</target>
-        <description>UNIMAG Interface</description>
       </action>
     </actions>
     <text>UNIMAG</text>
     <x>440</x>
     <y>180</y>
-    <width>100</width>
     <height>35</height>
-    <background_color>
-      <color red="0" green="180" blue="0">
-      </color>
-    </background_color>
     <foreground_color>
       <color red="255" green="255" blue="255">
       </color>
     </foreground_color>
+    <background_color>
+      <color red="0" green="180" blue="0">
+      </color>
+    </background_color>
     <tooltip>Open UNIMAG-style control panel</tooltip>
   </widget>
   <widget type="action_button" version="3.0.0">
     <name>Dev2Serial</name>
     <actions>
       <action type="open_display">
+        <description>Serial Debug Interface</description>
         <file>OCEM_serial_v2.bob</file>
         <macros>
           <P>BTF:MAG:OCEME642</P>
           <R>QUATM001</R>
         </macros>
         <target>window</target>
-        <description>Serial Debug Interface</description>
       </action>
     </actions>
     <text>Serial Debug</text>
     <x>550</x>
     <y>180</y>
-    <width>100</width>
     <height>35</height>
-    <background_color>
-      <color red="100" green="100" blue="150">
-      </color>
-    </background_color>
     <foreground_color>
       <color red="255" green="255" blue="255">
       </color>
     </foreground_color>
+    <background_color>
+      <color red="100" green="100" blue="150">
+      </color>
+    </background_color>
     <tooltip>Open Serial debug panel</tooltip>
   </widget>
   <widget type="led" version="2.0.0">
@@ -428,17 +403,12 @@
     <pv_name>BTF:MAG:OCEME642:QUATM001:Status</pv_name>
     <x>665</x>
     <y>188</y>
-    <width>20</width>
-    <height>20</height>
   </widget>
-
-  <!-- QUATM004 Row -->
   <widget type="label" version="2.0.0">
     <name>Dev3Name</name>
     <text>QUATM004</text>
     <x>30</x>
     <y>230</y>
-    <width>100</width>
     <height>35</height>
     <font>
       <font family="Liberation Sans" style="BOLD" size="14.0">
@@ -464,7 +434,6 @@
     <pv_name>BTF:MAG:OCEME642:QUATM004:Status</pv_name>
     <x>200</x>
     <y>233</y>
-    <width>100</width>
     <height>30</height>
     <background_color>
       <color red="220" green="220" blue="220">
@@ -480,12 +449,12 @@
     <y>233</y>
     <width>80</width>
     <height>30</height>
-    <format>1</format>
-    <precision>2</precision>
     <background_color>
       <color red="230" green="240" blue="250">
       </color>
     </background_color>
+    <format>1</format>
+    <precision>2</precision>
     <horizontal_alignment>2</horizontal_alignment>
     <vertical_alignment>1</vertical_alignment>
   </widget>
@@ -506,6 +475,7 @@
     <name>Dev3Unimag</name>
     <actions>
       <action type="open_display">
+        <description>UNIMAG Interface</description>
         <file>OCEM_unimag_v2.bob</file>
         <macros>
           <P>BTF:MAG:OCEME642</P>
@@ -514,50 +484,47 @@
           <VMAX>25</VMAX>
         </macros>
         <target>window</target>
-        <description>UNIMAG Interface</description>
       </action>
     </actions>
     <text>UNIMAG</text>
     <x>440</x>
     <y>230</y>
-    <width>100</width>
     <height>35</height>
-    <background_color>
-      <color red="0" green="180" blue="0">
-      </color>
-    </background_color>
     <foreground_color>
       <color red="255" green="255" blue="255">
       </color>
     </foreground_color>
+    <background_color>
+      <color red="0" green="180" blue="0">
+      </color>
+    </background_color>
     <tooltip>Open UNIMAG-style control panel</tooltip>
   </widget>
   <widget type="action_button" version="3.0.0">
     <name>Dev3Serial</name>
     <actions>
       <action type="open_display">
+        <description>Serial Debug Interface</description>
         <file>OCEM_serial_v2.bob</file>
         <macros>
           <P>BTF:MAG:OCEME642</P>
           <R>QUATM004</R>
         </macros>
         <target>window</target>
-        <description>Serial Debug Interface</description>
       </action>
     </actions>
     <text>Serial Debug</text>
     <x>550</x>
     <y>230</y>
-    <width>100</width>
     <height>35</height>
-    <background_color>
-      <color red="100" green="100" blue="150">
-      </color>
-    </background_color>
     <foreground_color>
       <color red="255" green="255" blue="255">
       </color>
     </foreground_color>
+    <background_color>
+      <color red="100" green="100" blue="150">
+      </color>
+    </background_color>
     <tooltip>Open Serial debug panel</tooltip>
   </widget>
   <widget type="led" version="2.0.0">
@@ -565,17 +532,12 @@
     <pv_name>BTF:MAG:OCEME642:QUATM004:Status</pv_name>
     <x>665</x>
     <y>238</y>
-    <width>20</width>
-    <height>20</height>
   </widget>
-
-  <!-- QUATB101 Row -->
   <widget type="label" version="2.0.0">
     <name>Dev4Name</name>
     <text>QUATB101</text>
     <x>30</x>
     <y>280</y>
-    <width>100</width>
     <height>35</height>
     <font>
       <font family="Liberation Sans" style="BOLD" size="14.0">
@@ -601,7 +563,6 @@
     <pv_name>BTF:MAG:OCEME642:QUATB101:Status</pv_name>
     <x>200</x>
     <y>283</y>
-    <width>100</width>
     <height>30</height>
     <background_color>
       <color red="220" green="220" blue="220">
@@ -617,12 +578,12 @@
     <y>283</y>
     <width>80</width>
     <height>30</height>
-    <format>1</format>
-    <precision>2</precision>
     <background_color>
       <color red="230" green="240" blue="250">
       </color>
     </background_color>
+    <format>1</format>
+    <precision>2</precision>
     <horizontal_alignment>2</horizontal_alignment>
     <vertical_alignment>1</vertical_alignment>
   </widget>
@@ -643,6 +604,7 @@
     <name>Dev4Unimag</name>
     <actions>
       <action type="open_display">
+        <description>UNIMAG Interface</description>
         <file>OCEM_unimag_v2.bob</file>
         <macros>
           <P>BTF:MAG:OCEME642</P>
@@ -651,50 +613,47 @@
           <VMAX>25</VMAX>
         </macros>
         <target>window</target>
-        <description>UNIMAG Interface</description>
       </action>
     </actions>
     <text>UNIMAG</text>
     <x>440</x>
     <y>280</y>
-    <width>100</width>
     <height>35</height>
-    <background_color>
-      <color red="0" green="180" blue="0">
-      </color>
-    </background_color>
     <foreground_color>
       <color red="255" green="255" blue="255">
       </color>
     </foreground_color>
+    <background_color>
+      <color red="0" green="180" blue="0">
+      </color>
+    </background_color>
     <tooltip>Open UNIMAG-style control panel</tooltip>
   </widget>
   <widget type="action_button" version="3.0.0">
     <name>Dev4Serial</name>
     <actions>
       <action type="open_display">
+        <description>Serial Debug Interface</description>
         <file>OCEM_serial_v2.bob</file>
         <macros>
           <P>BTF:MAG:OCEME642</P>
           <R>QUATB101</R>
         </macros>
         <target>window</target>
-        <description>Serial Debug Interface</description>
       </action>
     </actions>
     <text>Serial Debug</text>
     <x>550</x>
     <y>280</y>
-    <width>100</width>
     <height>35</height>
-    <background_color>
-      <color red="100" green="100" blue="150">
-      </color>
-    </background_color>
     <foreground_color>
       <color red="255" green="255" blue="255">
       </color>
     </foreground_color>
+    <background_color>
+      <color red="100" green="100" blue="150">
+      </color>
+    </background_color>
     <tooltip>Open Serial debug panel</tooltip>
   </widget>
   <widget type="led" version="2.0.0">
@@ -702,11 +661,7 @@
     <pv_name>BTF:MAG:OCEME642:QUATB101:Status</pv_name>
     <x>665</x>
     <y>288</y>
-    <width>20</width>
-    <height>20</height>
   </widget>
-
-  <!-- Separator -->
   <widget type="rectangle" version="2.0.0">
     <name>Separator2</name>
     <x>20</x>
@@ -722,15 +677,12 @@
       </color>
     </background_color>
   </widget>
-
-  <!-- Info Footer -->
   <widget type="label" version="2.0.0">
     <name>Footer</name>
     <text>OCEM E642 Power Supply Control System - Adaptive Polling Enabled</text>
     <x>20</x>
     <y>350</y>
     <width>400</width>
-    <height>20</height>
     <font>
       <font family="Liberation Sans" style="ITALIC" size="11.0">
       </font>
@@ -740,14 +692,12 @@
       </color>
     </foreground_color>
   </widget>
-  
-  <!-- Polling Status Info -->
   <widget type="group" version="3.0.0">
     <name>PollingInfo</name>
     <x>20</x>
     <y>380</y>
     <width>710</width>
-    <height>55</height>
+    <height>70</height>
     <style>1</style>
     <foreground_color>
       <color red="100" green="100" blue="100">
@@ -759,7 +709,6 @@
       <x>10</x>
       <y>5</y>
       <width>650</width>
-      <height>20</height>
       <font>
         <font family="Liberation Mono" style="REGULAR" size="11.0">
         </font>
@@ -775,7 +724,6 @@
       <x>10</x>
       <y>28</y>
       <width>650</width>
-      <height>20</height>
       <font>
         <font family="Liberation Sans" style="ITALIC" size="10.0">
         </font>

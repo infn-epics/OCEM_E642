@@ -192,6 +192,12 @@ record(mbbi, "$(P):$(R):STATE_RB") {
     field(FVVL, "5")
     field(FVST, "ERROR")
     field(FVSV, "MAJOR")
+    field(SXVL, "6")
+    field(SXST, "SP_NOT_REACHED")
+    field(SXSV, "MINOR")
+    field(SVVL, "7")
+    field(SVST, "ST_NOT_REACHED")
+    field(SVSV, "MAJOR")
 }
 
 
@@ -376,10 +382,6 @@ record(mbbo, "$(P):$(R):STATE_SP") {
     field(TWST, "STANDBY")
     field(THVL, "3")
     field(THST, "RESET")
-    field(FRVL, "4")
-    field(FRST, "INTERLOCK")
-    field(FVVL, "5")
-    field(FVST, "ERROR")
     field(FLNK, "$(P):$(R):state_router")
 }
 
@@ -706,37 +708,61 @@ record(ao, "$(P):$(R):THRESHOLD:voltage") {
 # ============================================
 # Forced Query Configuration
 # ============================================
-# When FIFO is empty, periodically send SL/SA commands to refresh state
-# 0 = disabled, otherwise interval in seconds (default 60)
+# Periodic SL/SA polling configuration
+# When enabled and FIFO is empty, periodically send SL/SA commands
+# POLL_STATE/POLL_ANALOG: 0 = disabled, 1 = enabled
+# POLL_STATE_INTERVAL/POLL_ANALOG_INTERVAL: interval in seconds (default 1.0)
 
-# Forced state (SL) query interval
-# Forces dump of status (STA, POL, ALL, SEL, VER)
-record(ao, "$(P):$(R):FORCE_STATE_QUERY_S") {
-    field(DESC, "Forced SL query interval")
+# Enable periodic SL (state) polling (0=disabled, 1=enabled)
+record(ao, "$(P):$(R):POLL_STATE") {
+    field(DESC, "Enable SL polling")
     field(DTYP, "OCEME642")
-    field(OUT,  "@$(ADDR) FORCE_STATE_QUERY_S")
-    field(EGU,  "s")
+    field(OUT,  "@$(ADDR) POLL_STATE")
     field(PREC, "0")
-    field(VAL,  "$(FORCE_STATE_QUERY_S=60)")
+    field(VAL,  "$(POLL_STATE=0)")
     field(DRVL, "0")
-    field(DRVH, "3600")
-    field(HOPR, "3600")
-    field(LOPR, "0")
+    field(DRVH, "1")
     field(PINI, "YES")
 }
 
-# Forced operating (SA) query interval
-# Forces dump of operating data (COR, TEN)
-record(ao, "$(P):$(R):FORCE_OPERATING_QUERY_S") {
-    field(DESC, "Forced SA query interval")
+# SL polling interval
+record(ao, "$(P):$(R):POLL_STATE_INTERVAL") {
+    field(DESC, "SL poll interval")
     field(DTYP, "OCEME642")
-    field(OUT,  "@$(ADDR) FORCE_OPERATING_QUERY_S")
+    field(OUT,  "@$(ADDR) POLL_STATE_INTERVAL")
     field(EGU,  "s")
-    field(PREC, "0")
-    field(VAL,  "$(FORCE_OPERATING_QUERY_S=60)")
-    field(DRVL, "0")
+    field(PREC, "1")
+    field(VAL,  "$(POLL_STATE_INTERVAL=1.0)")
+    field(DRVL, "0.1")
     field(DRVH, "3600")
-    field(HOPR, "3600")
-    field(LOPR, "0")
+    field(HOPR, "60")
+    field(LOPR, "0.1")
+    field(PINI, "YES")
+}
+
+# Enable periodic SA (analog) polling (0=disabled, 1=enabled)
+record(ao, "$(P):$(R):POLL_ANALOG") {
+    field(DESC, "Enable SA polling")
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) POLL_ANALOG")
+    field(PREC, "0")
+    field(VAL,  "$(POLL_ANALOG=0)")
+    field(DRVL, "0")
+    field(DRVH, "1")
+    field(PINI, "YES")
+}
+
+# SA polling interval
+record(ao, "$(P):$(R):POLL_ANALOG_INTERVAL") {
+    field(DESC, "SA poll interval")
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) POLL_ANALOG_INTERVAL")
+    field(EGU,  "s")
+    field(PREC, "1")
+    field(VAL,  "$(POLL_ANALOG_INTERVAL=1.0)")
+    field(DRVL, "0.1")
+    field(DRVH, "3600")
+    field(HOPR, "60")
+    field(LOPR, "0.1")
     field(PINI, "YES")
 }

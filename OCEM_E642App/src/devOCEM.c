@@ -54,6 +54,9 @@ static long si_read(stringinRecord *prec) {
     if (!p || !drv) return -1;
     
     OCEM_Slave *slave = &drv->slaves[p->addr];
+    
+    // Set record prefix if not yet set (used for IMAX/VMAX lookup)
+    ocem_setRecordPrefix(slave, prec->name);
 
     if (strcasecmp(p->var, "STA") == 0) {
         strncpy(prec->val, slave->status, sizeof(prec->val));
@@ -688,18 +691,48 @@ static long ao_write(aoRecord *prec)
         if (slave->VMAX > 0 && slave->voltagePrgH > 0) {
             ocem_sendThreshold(slave, 1, prec->val);
         }
-    } else if (strcasecmp(p->var, "FORCE_STATE_QUERY_S") == 0) {
-        // Interval for forced state query (SL) when FIFO empty
-        slave->forceStateQueryS = prec->val;
+    } else if (strcasecmp(p->var, "POLL_STATE") == 0) {
+        // Enable/disable periodic SL polling (0=disabled, 1=enabled)
+        slave->pollStateEnabled = (prec->val > 0.5) ? 1 : 0;
         // Initialize timestamp so first query happens after interval
         epicsTimeGetCurrent(&slave->lastForceStateTime);
-        errlogPrintf("UNIMAG[%d]: force_state_query = %.0f s\n", p->addr, prec->val);
-    } else if (strcasecmp(p->var, "FORCE_OPERATING_QUERY_S") == 0) {
-        // Interval for forced operating query (SA) when FIFO empty
-        slave->forceOperatingQueryS = prec->val;
+        errlogPrintf("OCEM[%d]: poll_state_enabled = %d\n", p->addr, slave->pollStateEnabled);
+    } else if (strcasecmp(p->var, "POLL_ANALOG") == 0) {
+        // Enable/disable periodic SA polling (0=disabled, 1=enabled)
+        slave->pollAnalogEnabled = (prec->val > 0.5) ? 1 : 0;
         // Initialize timestamp so first query happens after interval
         epicsTimeGetCurrent(&slave->lastForceOperatingTime);
-        errlogPrintf("UNIMAG[%d]: force_operating_query = %.0f s\n", p->addr, prec->val);
+        errlogPrintf("OCEM[%d]: poll_analog_enabled = %d\n", p->addr, slave->pollAnalogEnabled);
+    } else if (strcasecmp(p->var, "POLL_STATE_INTERVAL") == 0) {
+        // Interval for SL polling in seconds
+        slave->pollStateIntervalS = prec->val;
+        if (slave->pollStateIntervalS < 0.1) slave->pollStateIntervalS = 0.1;  // Min 100ms
+        errlogPrintf("OCEM[%d]: poll_state_interval = %.1f s\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "POLL_ANALOG_INTERVAL") == 0) {
+        // Interval for SA polling in seconds
+        slave->pollAnalogIntervalS = prec->val;
+        if (slave->pollAnalogIntervalS < 0.1) slave->pollAnalogIntervalS = 0.1;  // Min 100ms
+        errlogPrintf("OCEM[%d]: poll_analog_interval = %.1f s\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "POLL_RATIO_NORMAL") == 0) {
+        // Ratio for normal ON state (analog polls per state poll)
+        slave->pollRatioNormal = prec->val;
+        if (slave->pollRatioNormal < 0.01) slave->pollRatioNormal = 0.01;
+        errlogPrintf("OCEM[%d]: poll_ratio_normal = %.2f\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "POLL_RATIO_SET") == 0) {
+        // Ratio for GOING_TO_SET state (more analog polls during ramping)
+        slave->pollRatioSet = prec->val;
+        if (slave->pollRatioSet < 0.01) slave->pollRatioSet = 0.01;
+        errlogPrintf("OCEM[%d]: poll_ratio_set = %.2f\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "POLL_RATIO_STATE") == 0) {
+        // Ratio for CHANGE_POL/WAIT_POL states (more state polls)
+        slave->pollRatioState = prec->val;
+        if (slave->pollRatioState < 0.01) slave->pollRatioState = 0.01;
+        errlogPrintf("OCEM[%d]: poll_ratio_state = %.2f\n", p->addr, prec->val);
+    } else if (strcasecmp(p->var, "POLL_RATIO_BALANCED") == 0) {
+        // Ratio for ZERO_STBY state (balanced polling)
+        slave->pollRatioBalanced = prec->val;
+        if (slave->pollRatioBalanced < 0.01) slave->pollRatioBalanced = 0.01;
+        errlogPrintf("OCEM[%d]: poll_ratio_balanced = %.2f\n", p->addr, prec->val);
     } else {
         errlogPrintf("ao_write: unknown var '%s'\n", p->var);
         return -1;
@@ -955,6 +988,9 @@ static long ai_read(aiRecord *prec)
         return -1;
     }
     
+    // Set record prefix if not yet set (used for IMAX/VMAX lookup)
+    ocem_setRecordPrefix(slave, prec->name);
+    
     if (strcasecmp(p->var, "CURRENT_RB_A") == 0) {
         prec->val = slave->currentRB;
     } else if (strcasecmp(p->var, "CURRENT_SP_A") == 0) {
@@ -971,6 +1007,14 @@ static long ai_read(aiRecord *prec)
         prec->val = slave->IMAX;
     } else if (strcasecmp(p->var, "VMAX_RB") == 0) {
         prec->val = slave->VMAX;
+    } else if (strcasecmp(p->var, "POLL_RATIO_NORMAL") == 0) {
+        prec->val = slave->pollRatioNormal;
+    } else if (strcasecmp(p->var, "POLL_RATIO_SET") == 0) {
+        prec->val = slave->pollRatioSet;
+    } else if (strcasecmp(p->var, "POLL_RATIO_STATE") == 0) {
+        prec->val = slave->pollRatioState;
+    } else if (strcasecmp(p->var, "POLL_RATIO_BALANCED") == 0) {
+        prec->val = slave->pollRatioBalanced;
     } else {
         return -1;
     }

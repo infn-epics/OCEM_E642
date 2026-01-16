@@ -64,6 +64,15 @@ typedef struct {
     //struct OCEM_Var *varRef; // puntatore diretto alla variabile nello slave da usare in caso di generalizzazione.
 } ocemDpvt;
 
+// Per-slave initialization state
+typedef enum {
+    PS_INIT_NOT_STARTED = 0,    // Not yet attempted
+    PS_INIT_DRAINING_FIFO,      // Draining stale data from FIFO before RMT
+    PS_INIT_SENDING_RMT,        // About to send RMT command
+    PS_INIT_WAITING_DATA,       // RMT sent, waiting for response data
+    PS_INIT_COMPLETE,           // All required data received
+    PS_INIT_FAILED              // Failed after max retries
+} PSInitState;
 
 typedef enum {
     STATE_IDLE,
@@ -138,6 +147,7 @@ typedef struct {
 
 typedef struct {
     int addr;           // indirizzo slave
+    char recordPrefix[80];  // Record name prefix (e.g., "BTF:MAG:OCEME642:QUATB102")
     char lastSelCommand[32];
     char status[40];
     char current[40];
@@ -177,15 +187,39 @@ typedef struct {
     double currentSP;               // Current setpoint in Amperes (from user)
     
     // Threshold for unsolicited messages (TH command)
-    double currentThresholdA;       // Current threshold in Amperes (default 5% of IMAX)
-    double voltageThresholdV;       // Voltage threshold in Volts (default 5% of VMAX)
+    double currentThresholdA;       // Current threshold in Amperes (sent to PS)
+    double voltageThresholdV;       // Voltage threshold in Volts (sent to PS)
     int thresholdsSent;             // Flag: thresholds have been sent to PS
     
-    // Forced query configuration (when FIFO is empty)
-    double forceStateQueryS;        // Seconds between forced SL queries (0=disabled, default 60)
-    double forceOperatingQueryS;    // Seconds between forced SA queries (0=disabled, default 60)
+    // Per-slave initialization state machine
+    PSInitState initState;          // Current initialization state
+    int initRetryCount;             // Number of RMT retries
+    epicsTimeStamp initStartTime;   // When init started for this PS
+    int hasVER;                     // 1 = VER received
+    int hasPRG;                     // 1 = PRG data received (currentPrgH > 0)
+    int hasSTA;                     // 1 = STA received (status is set)
+    int hasCOR;                     // 1 = COR received (current value)
+    int hasTEN;                     // 1 = TEN received (voltage value)
+    
+    // Polling-based query configuration (when FIFO is empty)
+    // Use these instead of relying on unsolicited messages
+    int pollStateEnabled;           // 1 = periodically query SL for state (instead of waiting for unsolicited)
+    int pollAnalogEnabled;          // 1 = periodically query SA for COR/TEN (instead of waiting for unsolicited)
+    double pollStateIntervalS;      // Seconds between SL queries when pollStateEnabled (default 1.0)
+    double pollAnalogIntervalS;     // Seconds between SA queries when pollAnalogEnabled (default 1.0)
     epicsTimeStamp lastForceStateTime;   // Timestamp of last forced SL query
     epicsTimeStamp lastForceOperatingTime; // Timestamp of last forced SA query
+    
+    // Poll ratio configuration: ratio = analog polls per state poll
+    // E.g., ratio=2.0 means 2 analog polls for every 1 state poll (3 cycles: A, A, S)
+    // ratio=0.33 means 1 analog poll for every 3 state polls (4 cycles: S, S, S, A)
+    double pollRatioNormal;         // Ratio when in normal ON state (default 2.0)
+    double pollRatioSet;            // Ratio when GOING_TO_SET (default 5.0)
+    double pollRatioState;          // Ratio when CHANGE_POL/WAIT_POL (default 0.33)
+    double pollRatioBalanced;       // Ratio when ZERO_STBY (default 1.0)
+    int pollCycleCounter;           // Counter for determining next poll type
+    int pollAnalogCount;            // Analog polls done in current ratio cycle
+    int pollStateCount;             // State polls done in current ratio cycle
     
     //IOSCANPVT per notificare record
     IOSCANPVT ioscanStatus;
@@ -217,6 +251,14 @@ typedef struct {
     double idlePollingPeriod;    // polling period when no commands pending (slower)
     double activePollingPeriod;  // polling period when commands are active (faster)
     double commandActiveTimeout; // how long a slave stays in "active" mode after command
+    
+    // Initialization phase configuration
+    double initTimeoutS;         // timeout for each PS init before retry (default 5s)
+    int initMaxRetries;          // max retries before marking PS failed (default 3)
+    double initPollPeriod;       // polling period during init (fast, default 0.1s)
+    int currentInitSlaveIdx;     // index into addrList of slave currently being initialized
+    int allSlavesInitialized;    // 1 = all slaves init complete or failed
+    
     asynUser *pasynUser;
     asynInterface *pasynInterface;
     asynOctet *pasynOctet;
@@ -243,6 +285,8 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave);
 const char* unimag_getStateName(UnimagState state);
 const char* unimag_getChannelStateName(ChannelState state);
 int ocem_sendThreshold(OCEM_Slave *slave, int channel, double valueA);
+void ocem_setRecordPrefix(OCEM_Slave* slave, const char* recordName);
+void ocem_readImaxVmax(OCEM_Slave* slave);
 
 extern  OCEM_Driver *drv;
 

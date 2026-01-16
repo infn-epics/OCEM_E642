@@ -69,21 +69,25 @@ Default: 1 s
 Example dbLoadRecords with custom configuration:
 dbLoadRecords("OCEM_E642.db", "P=BTF:MAG,R=PS1,ADDR=0,IMAX=100,VMAX=25,SET_TOLERANCE=0.5,ZERO_TOLERANCE=0.5,SET_TIMEOUT_S=15,MAX_RETRIES=5,RETRY_DELAY=2")
 
-Channel State Values (STATE_RB, STATE_SP)
+Channel State Values STATE_SP
 
-The channel state PVs represent the operational status of the magnet channel.
+STATE_SP
+0 OFF power off power supply go completely offline (expose just in a the detailed display and ask for confirmation)
+1 ON power on power supply
+2 STANDBY stanby power supply
+3 RESET reset FAULT/ERRORS
 
-Possible values:
 
-OFF – Magnet is powered off
+STATE_RB Possible values:
 
-ON – Magnet is powered and active
-
-STANDBY – Magnet is in standby mode
-
-FAULT – A fault condition has been detected
-
-RESET – Reset operation in progress
+0 OFF – Magnet is powered off
+1 ON – Magnet is powered and active
+2 STANDBY – Magnet is in standby mode
+3 RESET – Reset operation in progress
+4 FAULT/INTERLOCK alert MAJOR – A fault condition has been detected by PS (the detail should be depends on the alarm bit)
+5 ERROR alert MAJOR - An error as been detected by IOC like unconnected
+6 SETPOINT_NOT_REACHED alert Minor - A set point has not been reached within the defined error
+7 STATE_NOT_REACHED alert Major - A state has not been reached
 
 
 UNIMAG Machine State

@@ -147,18 +147,34 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
     {
         strncpy(slave->status, val, sizeof(slave->status));
         slave->status[sizeof(slave->status)-1] = '\0';
+        slave->hasSTA = 1;  // Mark STA received for initialization tracking
 
+        // Determine base unimagStatus from PS status
+        // Values: 0=OFF, 1=ON, 2=STANDBY, 3=RESET, 4=INTERLOCK, 5=ERROR, 6=SETPOINT_NOT_REACHED, 7=STATE_NOT_REACHED
         if (strcmp(val, "ATT") == 0)
-            slave->unimagStatus = 1;
+            slave->unimagStatus = 1;  // ON
         else if (strcmp(val, "STB") == 0)
-            slave->unimagStatus = 2;
+            slave->unimagStatus = 2;  // STANDBY
+        else if (strcmp(val, "RES") == 0)
+            slave->unimagStatus = 3;  // RESET
+        else if (strcmp(val, "OFF") == 0)
+            slave->unimagStatus = 0;  // OFF
         else
-            slave->unimagStatus = 5;
+            slave->unimagStatus = 5;  // ERROR (unknown state)
 
-        if (strncmp(slave->alarms,"NO",2))
+        // Override with INTERLOCK if alarms are present
+        // Check if alarms string is non-empty AND doesn't start with "NO"
+        if (slave->alarms[0] != '\0' && strncmp(slave->alarms, "NO", 2) != 0)
         {
-            slave->unimagStatus = 4;
+            slave->unimagStatus = 4;  // INTERLOCK
         }
+        
+        // Override with STATE_NOT_REACHED if UNIMAG state machine indicates failure
+        if (slave->unimag.state == UNIMAG_NOT_REACHED)
+        {
+            slave->unimagStatus = 7;  // STATE_NOT_REACHED
+        }
+        
         scanIoRequest(slave->ioscanStatus);
         
         // Check if this status update verifies a pending command
@@ -173,6 +189,7 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         
         strncpy(slave->current, cleanVal, sizeof(slave->current));
         slave->current[sizeof(slave->current)-1] = '\0';
+        slave->hasCOR = 1;  // Mark COR received for initialization tracking
         scanIoRequest(slave->ioscanCurrent);
     }
     else if (strcmp(cmd, "TEN") == 0) 
@@ -185,6 +202,7 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         
         strncpy(slave->voltage, cleanVal, sizeof(slave->voltage));
         slave->voltage[sizeof(slave->voltage)-1] = '\0';
+        slave->hasTEN = 1;  // Mark TEN received for initialization tracking
         scanIoRequest(slave->ioscanVoltage);
     }
     else if (strcmp(cmd, "POL") == 0) 
@@ -259,6 +277,7 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         while (len > 0 && (slave->version[len-1] == ' ' || slave->version[len-1] == '\r' || slave->version[len-1] == '\n')) {
             slave->version[--len] = '\0';
         }
+        slave->hasVER = 1;  // Mark VER received for initialization tracking
         OCEM_INFO("[PS%d] VER: '%s'\n", slaveId, slave->version);
         scanIoRequest(slave->ioscanInit);  // Use init scan for version update
     }
@@ -269,6 +288,7 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         {
             slave->currentPrgL=minvalue;
             slave->currentPrgH=maxvalue;
+            slave->hasPRG = 1;  // Mark PRG received for initialization tracking
             scanIoRequest(slave->ioscanInit);
             errlogPrintf("CURRENT PRG: min : %d max %d\n",minvalue,maxvalue);
             
@@ -682,43 +702,75 @@ int ampereInBits(double ampere,OCEM_Slave *slave)
 
 }
 
+// Store record prefix from a record name (e.g., "BTF:MAG:OCEME642:QUATB102:STATUS" -> "BTF:MAG:OCEME642:QUATB102")
+void ocem_setRecordPrefix(OCEM_Slave* slave, const char* recordName)
+{
+    if (!slave || !recordName || slave->recordPrefix[0] != '\0') return;
+    
+    // Find the last ':' to strip the field name
+    const char* lastColon = strrchr(recordName, ':');
+    if (!lastColon) return;
+    
+    size_t prefixLen = lastColon - recordName;
+    if (prefixLen >= sizeof(slave->recordPrefix)) {
+        prefixLen = sizeof(slave->recordPrefix) - 1;
+    }
+    strncpy(slave->recordPrefix, recordName, prefixLen);
+    slave->recordPrefix[prefixLen] = '\0';
+    OCEM_INFO("[PS%d] Record prefix set to '%s'\n", slave->addr, slave->recordPrefix);
+}
+
+// Read IMAX and VMAX from the database records directly by name
+void ocem_readImaxVmax(OCEM_Slave* slave)
+{
+    if (!slave || slave->recordPrefix[0] == '\0') return;
+    
+    char pvName[128];
+    struct dbAddr addr;
+    double value = 0;
+    long status;
+    long options = 0;
+    long nreq = 1;
+    
+    // Read IMAX if not yet set
+    if (slave->IMAX <= 0) {
+        snprintf(pvName, sizeof(pvName), "%s:IMAX", slave->recordPrefix);
+        if (dbNameToAddr(pvName, &addr) == 0) {
+            status = dbGetField(&addr, DBR_DOUBLE, &value, &options, &nreq, NULL);
+            if (status == 0 && value > 0) {
+                slave->IMAX = value;
+                OCEM_INFO("[PS%d] IMAX read from '%s' = %.1f A\n", slave->addr, pvName, slave->IMAX);
+            }
+        } else {
+            OCEM_DETAIL("[PS%d] IMAX record '%s' not found\n", slave->addr, pvName);
+        }
+    }
+    
+    // Read VMAX if not yet set
+    if (slave->VMAX <= 0) {
+        snprintf(pvName, sizeof(pvName), "%s:VMAX", slave->recordPrefix);
+        if (dbNameToAddr(pvName, &addr) == 0) {
+            value = 0;
+            status = dbGetField(&addr, DBR_DOUBLE, &value, &options, &nreq, NULL);
+            if (status == 0 && value > 0) {
+                slave->VMAX = value;
+                OCEM_INFO("[PS%d] VMAX read from '%s' = %.1f V\n", slave->addr, pvName, slave->VMAX);
+            }
+        } else {
+            OCEM_DETAIL("[PS%d] VMAX record '%s' not found\n", slave->addr, pvName);
+        }
+    }
+}
+
 void checkCurrentSetStatus(OCEM_Slave* slave)
 {
     char response[128];
     size_t responseSize=128;
     
-    // Read IMAX and VMAX from linked records if not yet set
+    // Read IMAX and VMAX from database records directly by name
     if (slave->IMAX <= 0 || slave->VMAX <= 0)
     {
-        for (int i = 0; i < MAX_OCEM_RECORDS; i++)
-        {
-            ocemDpvt *p = ocem_records[i];
-            if (!p) continue;
-            if (p->addr != slave->addr) continue;  // Only look at records for this slave
-
-            if (p->linkedAddr && p->linkedAddr->precord)
-            {
-                double value = 0;
-                long status = 0;
-                long options = 0;
-                long nreq = 1;
-                const char *recName = p->linkedAddr->precord->name;
-
-                status = dbGetField(p->linkedAddr, DBR_DOUBLE, &value, &options, &nreq, NULL);
-                
-                if (status == 0 && value > 0)
-                {
-                    // Check if this is an IMAX or VMAX record by name
-                    if (strstr(recName, "IMAX") != NULL && slave->IMAX <= 0) {
-                        slave->IMAX = value;
-                        OCEM_INFO("[PS%d] IMAX set to %.1f A\n", slave->addr, slave->IMAX);
-                    } else if (strstr(recName, "VMAX") != NULL && slave->VMAX <= 0) {
-                        slave->VMAX = value;
-                        OCEM_INFO("[PS%d] VMAX set to %.1f V\n", slave->addr, slave->VMAX);
-                    }
-                }
-            }
-        }
+        ocem_readImaxVmax(slave);
     }
     switch(slave->Ostate)
     {
@@ -952,6 +1004,90 @@ static const char* getCmdStateName(CmdState state)
 }
 
 // ============================================
+// POLL RATIO HELPER FUNCTIONS
+// ============================================
+
+// Get the effective poll ratio based on current UNIMAG state
+// Returns ratio = analog polls per state poll
+static double getPollRatio(OCEM_Slave *slave)
+{
+    switch (slave->unimag.state) {
+        case UNIMAG_GOING_TO_SET:
+            return slave->pollRatioSet;         // High analog ratio when ramping
+        case UNIMAG_CHANGE_POL:
+        case UNIMAG_WAIT_POL:
+            return slave->pollRatioState;       // Low analog ratio during polarity change
+        case UNIMAG_ZERO_STBY:
+            return slave->pollRatioBalanced;    // Balanced during zero/standby
+        case UNIMAG_OK:
+        case UNIMAG_INIT:
+        case UNIMAG_NOT_REACHED:
+        default:
+            return slave->pollRatioNormal;      // Normal operation
+    }
+}
+
+// Determine whether to poll analog (SA) or state (SL) based on ratio
+// Returns: 1 = poll analog (SA), 0 = poll state (SL)
+// Uses cycle counter to distribute polls according to ratio
+static int shouldPollAnalog(OCEM_Slave *slave)
+{
+    double ratio = getPollRatio(slave);
+    
+    // Handle special cases
+    if (ratio <= 0.01) {
+        // Effectively 0 ratio: always poll state
+        return 0;
+    }
+    if (ratio >= 100.0) {
+        // Very high ratio: always poll analog
+        return 1;
+    }
+    
+    // Calculate target counts per cycle
+    // ratio = analog/state, so if ratio=2, we want 2 analog per 1 state
+    // If ratio=0.33, we want 1 analog per 3 state
+    int targetAnalog, targetState;
+    
+    if (ratio >= 1.0) {
+        // More analog polls than state
+        targetAnalog = (int)(ratio + 0.5);  // Round to nearest
+        targetState = 1;
+    } else {
+        // More state polls than analog
+        targetAnalog = 1;
+        targetState = (int)(1.0/ratio + 0.5);  // Round to nearest
+    }
+    
+    // Decide based on current counts in cycle
+    int totalTarget = targetAnalog + targetState;
+    int totalDone = slave->pollAnalogCount + slave->pollStateCount;
+    
+    // Reset cycle if complete
+    if (totalDone >= totalTarget) {
+        slave->pollAnalogCount = 0;
+        slave->pollStateCount = 0;
+        OCEM_DETAIL("[PS%d] Poll cycle reset (ratio=%.2f, target A=%d S=%d)\n",
+                   slave->addr, ratio, targetAnalog, targetState);
+    }
+    
+    // Decide what to poll next
+    // Priority: if analog count < target ratio, poll analog
+    // Use floating point to handle fractional ratios
+    double analogRatio = (slave->pollStateCount > 0) ? 
+                         (double)slave->pollAnalogCount / slave->pollStateCount : 
+                         (double)slave->pollAnalogCount;
+    
+    if (slave->pollStateCount == 0) {
+        // Haven't polled state yet - check if we should do analog first
+        return (slave->pollAnalogCount < targetAnalog);
+    }
+    
+    // Compare current ratio to target
+    return (analogRatio < ratio);
+}
+
+// ============================================
 // UNIMAG STATE MACHINE IMPLEMENTATION
 // ============================================
 
@@ -1008,6 +1144,12 @@ void unimag_init(OCEM_Slave *slave)
     slave->currentRB = 0.0;
     slave->voltageRB = 0.0;
     slave->currentSP = 0.0;
+    
+    // Initialize alarms to "NO " so alarm check works correctly at startup
+    strcpy(slave->alarms, "NO ");
+    slave->hasAlarm = 0;
+    slave->alarmMask = 0;
+    slave->unimagStatus = 0;  // Start as OFF until first STA is received
     
     // Threshold defaults: will be set to 5% of IMAX/VMAX when those are known
     // -1 means "use default when IMAX/VMAX become available"
@@ -1301,26 +1443,14 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
                   slave->addr, slave->currentThresholdA, slave->voltageThresholdV);
     }
     
-    // Handle INIT state - check for PRG initialization
+    // Handle INIT state - wait for global init phase to complete
     if (slave->unimag.state == UNIMAG_INIT) {
+        // The main polling loop handles transition from INIT to OK
+        // after startInitTimeS expires. Just wait here.
         if (slave->unimag.prgInitialized) {
             // PRG data received - transition to OK
             unimag_setState(slave, UNIMAG_OK, "Initialization complete");
             slave->unimag.busy = 0;
-        } else {
-            // Check for init timeout
-            epicsTimeStamp now;
-            epicsTimeGetCurrent(&now);
-            double elapsed = epicsTimeDiffInSeconds(&now, &slave->unimag.initStartTime);
-            
-            if (elapsed >= slave->unimagCfg.initTimeoutS) {
-                // Timeout - retry initialization by re-sending PRG S command
-                OCEM_INFO("[PS%d] UNIMAG: Init timeout (%.0fs), retrying PRG S\n", 
-                          slave->addr, elapsed);
-                send_command(drv, slave->addr, "RMT", response, responseSize);
-                // Reset timer for next timeout
-                epicsTimeGetCurrent(&slave->unimag.initStartTime);
-            }
         }
         return;  // Don't process other states while in INIT
     }
@@ -1431,6 +1561,29 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
     }
 }
 
+// Check if a slave has received all required init data
+static int ocem_isSlaveInitComplete(OCEM_Slave *slave)
+{
+    // Required: VER, PRG (at least currentPrgH), STA, COR, TEN
+    // Note: hasPRG is set when O0 is received (currentPrgH)
+    return (slave->hasVER && slave->hasPRG && slave->hasSTA && 
+            slave->hasCOR && slave->hasTEN);
+}
+
+// Get initialization state name for logging
+static const char* ocem_getInitStateName(PSInitState state)
+{
+    switch(state) {
+        case PS_INIT_NOT_STARTED: return "NOT_STARTED";
+        case PS_INIT_DRAINING_FIFO: return "DRAINING_FIFO";
+        case PS_INIT_SENDING_RMT: return "SENDING_RMT";
+        case PS_INIT_WAITING_DATA: return "WAITING_DATA";
+        case PS_INIT_COMPLETE: return "COMPLETE";
+        case PS_INIT_FAILED: return "FAILED";
+        default: return "UNKNOWN";
+    }
+}
+
 /* --- Thread di polling --- */
 static void ocem_polling(void *arg) {
     
@@ -1439,23 +1592,174 @@ static void ocem_polling(void *arg) {
     epicsThreadSleep(0.1);
     OCEM_INFO("Debug level: %d (0=errors, 1=info, 2=detail, 3=trace)\n", ocemDebugLevel);
 
-    OCEM_INFO("Initializing %d power supplies...\n", drv->nSlaves);
-    
-    for (int i=0; i < drv->nSlaves;i++)
-    {
-        OCEM_INFO("[PS%d] Sending RMT (remote mode)\n", drv->addrList[i]);
-        send_command(drv,drv->addrList[i],"RMT",response,responseSize);
-        // PRG data will be received via polling - defaults are already set
-    }
-    
-    printf("OCEM Polling started - Idle: %.2fs, Active: %.2fs, Timeout: %.2fs\n",
-           drv->idlePollingPeriod, drv->activePollingPeriod, drv->commandActiveTimeout);
+    OCEM_INFO("Starting per-slave initialization for %d power supplies...\n", drv->nSlaves);
+    printf("OCEM Polling started - Idle: %.2fs, Active: %.2fs, InitTimeout: %.1fs, MaxRetries: %d\n",
+           drv->idlePollingPeriod, drv->activePollingPeriod, 
+           drv->initTimeoutS, drv->initMaxRetries);
     
     int cycleCount = 0;
     
     while(drv->running) 
     {
         cycleCount++;
+        
+        // ============================================
+        // PHASE 1: Per-slave initialization
+        // ============================================
+        if (!drv->allSlavesInitialized) 
+        {
+            // Process current slave being initialized
+            if (drv->currentInitSlaveIdx < drv->nSlaves) 
+            {
+                int addr = drv->addrList[drv->currentInitSlaveIdx];
+                OCEM_Slave *slave = &drv->slaves[addr];
+                
+                switch (slave->initState) 
+                {
+                    case PS_INIT_NOT_STARTED:
+                        // First step: set thresholds to max to stop spontaneous messages
+                        OCEM_INFO("[PS%d] === Starting initialization (retry %d/%d) ===\n", 
+                                 addr, slave->initRetryCount + 1, drv->initMaxRetries);
+                        OCEM_INFO("[PS%d] Setting thresholds to max to stop spontaneous messages...\n", addr);
+                        // TH I0 = current threshold, TH I1 = voltage threshold
+                        // Set to maximum (999999) to stop COR/TEN messages
+                        send_command(drv, addr, "TH I0 999999", response, responseSize);
+                        epicsThreadSleep(0.05);
+                        send_command(drv, addr, "TH I1 999999", response, responseSize);
+                        OCEM_INFO("[PS%d] Draining FIFO before RMT...\n", addr);
+                        slave->initState = PS_INIT_DRAINING_FIFO;
+                        break;
+                    
+                    case PS_INIT_DRAINING_FIFO:
+                    {
+                        // Poll until FIFO is empty (returns 1 = EOT)
+                        epicsMutexLock(drv->ioLock);
+                        int ret = poll_request(drv, slave, response, responseSize);
+                        if (ret == 0) {
+                            // Got data - discard it and continue polling
+                            OCEM_INFO("[PS%d] DRAIN: discarding '%s'\n", addr, response);
+                        } else if (ret == 1) {
+                            // FIFO empty - now send RMT
+                            OCEM_INFO("[PS%d] FIFO empty - sending RMT\n", addr);
+                            epicsMutexUnlock(drv->ioLock);
+                            send_command(drv, addr, "RMT", response, responseSize);
+                            epicsTimeGetCurrent(&slave->initStartTime);
+                            slave->initState = PS_INIT_WAITING_DATA;
+                            break;
+                        }
+                        // ret < 0 means error - try again next cycle
+                        epicsMutexUnlock(drv->ioLock);
+                        break;
+                    }
+                        
+                    case PS_INIT_WAITING_DATA:
+                    {
+                        // Poll for data and check if all required data received
+                        epicsMutexLock(drv->ioLock);
+                        int ret = poll_request(drv, slave, response, responseSize);
+                        if (ret == 0) {
+                            OCEM_INFO("[PS%d] INIT response: '%s'\n", addr, response);
+                            parseMultiReply(response);
+                        }
+                        epicsMutexUnlock(drv->ioLock);
+                        
+                        // Check if all required data received
+                        if (ocem_isSlaveInitComplete(slave)) {
+                            // Read IMAX/VMAX from database records
+                            ocem_readImaxVmax(slave);
+                            
+                            OCEM_INFO("[PS%d] === Initialization COMPLETE ===\n", addr);
+                            OCEM_INFO("[PS%d]   VER='%s'\n", addr, slave->version);
+                            OCEM_INFO("[PS%d]   PRG: currentPrgH=%d, voltagePrgH=%d\n", 
+                                     addr, slave->currentPrgH, slave->voltagePrgH);
+                            OCEM_INFO("[PS%d]   STA='%s', COR='%s', TEN='%s'\n", 
+                                     addr, slave->status, slave->current, slave->voltage);
+                            OCEM_INFO("[PS%d]   IMAX=%.1f, VMAX=%.1f\n", addr, slave->IMAX, slave->VMAX);
+                            
+                            // Set thresholds if configured
+                            if (slave->currentThresholdA > 0) {
+                                ocem_sendThreshold(slave, 0, slave->currentThresholdA);
+                            }
+                            if (slave->voltageThresholdV > 0) {
+                                ocem_sendThreshold(slave, 1, slave->voltageThresholdV);
+                            }
+                            
+                            // Transition UNIMAG to OK state
+                            slave->unimag.state = UNIMAG_OK;
+                            slave->unimag.prgInitialized = 1;
+                            strcpy(slave->unimag.statusMsg, "Ready");
+                            scanIoRequest(slave->ioscanUnimag);
+                            
+                            slave->initState = PS_INIT_COMPLETE;
+                            drv->currentInitSlaveIdx++;  // Move to next slave
+                        }
+                        else {
+                            // Check timeout
+                            epicsTimeStamp now;
+                            epicsTimeGetCurrent(&now);
+                            double elapsed = epicsTimeDiffInSeconds(&now, &slave->initStartTime);
+                            
+                            if (elapsed >= drv->initTimeoutS) {
+                                // Timeout - retry or fail
+                                slave->initRetryCount++;
+                                if (slave->initRetryCount < drv->initMaxRetries) {
+                                    OCEM_ERR("[PS%d] Init timeout (%.1fs) - retrying (%d/%d)\n", 
+                                             addr, elapsed, slave->initRetryCount, drv->initMaxRetries);
+                                    OCEM_INFO("[PS%d]   Missing: VER=%d PRG=%d STA=%d COR=%d TEN=%d\n",
+                                             addr, slave->hasVER, slave->hasPRG, slave->hasSTA, 
+                                             slave->hasCOR, slave->hasTEN);
+                                    slave->initState = PS_INIT_NOT_STARTED;  // Retry
+                                } else {
+                                    OCEM_ERR("[PS%d] === Initialization FAILED after %d retries ===\n", 
+                                             addr, drv->initMaxRetries);
+                                    slave->initState = PS_INIT_FAILED;
+                                    slave->unimag.state = UNIMAG_NOT_REACHED;
+                                    strcpy(slave->unimag.statusMsg, "Init failed");
+                                    scanIoRequest(slave->ioscanUnimag);
+                                    drv->currentInitSlaveIdx++;  // Move to next slave
+                                }
+                            } else {
+                                OCEM_TRACE("[PS%d] Waiting for data... %.1fs/%.1fs (VER=%d PRG=%d STA=%d COR=%d TEN=%d)\n",
+                                          addr, elapsed, drv->initTimeoutS,
+                                          slave->hasVER, slave->hasPRG, slave->hasSTA, 
+                                          slave->hasCOR, slave->hasTEN);
+                            }
+                        }
+                        break;
+                    }
+                    
+                    case PS_INIT_COMPLETE:
+                    case PS_INIT_FAILED:
+                        // Already processed - move to next
+                        drv->currentInitSlaveIdx++;
+                        break;
+                        
+                    default:
+                        slave->initState = PS_INIT_NOT_STARTED;
+                        break;
+                }
+                
+                // Fast polling during init
+                epicsThreadSleep(drv->initPollPeriod);
+                continue;  // Skip normal polling during init phase
+            }
+            else {
+                // All slaves processed
+                drv->allSlavesInitialized = 1;
+                int successCount = 0, failCount = 0;
+                for (int i = 0; i < drv->nSlaves; i++) {
+                    OCEM_Slave *s = &drv->slaves[drv->addrList[i]];
+                    if (s->initState == PS_INIT_COMPLETE) successCount++;
+                    else if (s->initState == PS_INIT_FAILED) failCount++;
+                }
+                OCEM_INFO("=== All slaves initialized: %d OK, %d FAILED ===\n", 
+                         successCount, failCount);
+            }
+        }
+        
+        // ============================================
+        // PHASE 2: Normal polling (after init complete)
+        // ============================================
         
         // Determine current polling rate based on activity
         int isActive = hasActiveCommands(drv);
@@ -1474,6 +1778,9 @@ static void ocem_polling(void *arg) {
             for (int i=0; i < drv->nSlaves;i++)
             {
                 OCEM_Slave *slave = &drv->slaves[drv->addrList[i]];
+                
+                // Skip failed slaves in normal polling
+                if (slave->initState == PS_INIT_FAILED) continue;
                 
                 // Pass 0: Only poll slaves with pending commands or non-idle state
                 // Pass 1: Poll all remaining slaves
@@ -1497,30 +1804,74 @@ static void ocem_polling(void *arg) {
                 }
                 else if (ret == 1)
                 {
-                    // FIFO empty - check if periodic forced queries are needed
+                    // FIFO empty - use ratio-based polling to balance SL and SA queries
                     epicsTimeStamp now;
                     epicsTimeGetCurrent(&now);
                     int didQuery = 0;
                     
-                    // Check if SL (state) query is due
-                    if (slave->forceStateQueryS > 0) {
-                        double elapsed = epicsTimeDiffInSeconds(&now, &slave->lastForceStateTime);
-                        if (elapsed >= slave->forceStateQueryS) {
-                            OCEM_INFO("[PS%d] Forced SL query (%.0fs elapsed)\n", slave->addr, elapsed);
-                            select_command(drv, slave, "SL", response, responseSize);
-                            slave->lastForceStateTime = now;
-                            didQuery = 1;
+                    // Both state and analog polling must be enabled for ratio balancing
+                    if (slave->pollStateEnabled && slave->pollAnalogEnabled) {
+                        // Use poll ratio to decide whether to poll SA or SL
+                        double pollInterval = slave->pollStateIntervalS;  // Use state interval as base
+                        if (pollInterval <= 0) pollInterval = 1.0;
+                        
+                        // Check if enough time has elapsed since last poll of either type
+                        double elapsedState = epicsTimeDiffInSeconds(&now, &slave->lastForceStateTime);
+                        double elapsedAnalog = epicsTimeDiffInSeconds(&now, &slave->lastForceOperatingTime);
+                        double minElapsed = (elapsedState < elapsedAnalog) ? elapsedState : elapsedAnalog;
+                        
+                        if (minElapsed >= pollInterval) {
+                            // Time to poll - use ratio to decide which type
+                            if (shouldPollAnalog(slave)) {
+                                OCEM_INFO("[PS%d] Polling SA (ratio=%.2f, A=%d S=%d, state=%s)\n", 
+                                          slave->addr, getPollRatio(slave),
+                                          slave->pollAnalogCount, slave->pollStateCount,
+                                          unimag_getStateName(slave->unimag.state));
+                                select_command(drv, slave, "SA", response, responseSize);
+                                slave->lastForceOperatingTime = now;
+                                slave->pollAnalogCount++;
+                                didQuery = 1;
+                            } else {
+                                OCEM_INFO("[PS%d] Polling SL (ratio=%.2f, A=%d S=%d, state=%s)\n", 
+                                          slave->addr, getPollRatio(slave),
+                                          slave->pollAnalogCount, slave->pollStateCount,
+                                          unimag_getStateName(slave->unimag.state));
+                                select_command(drv, slave, "SL", response, responseSize);
+                                slave->lastForceStateTime = now;
+                                slave->pollStateCount++;
+                                didQuery = 1;
+                            }
                         }
-                    }
-                    
-                    // Check if SA (operating) query is due (only if we didn't just do SL)
-                    if (!didQuery && slave->forceOperatingQueryS > 0) {
-                        double elapsed = epicsTimeDiffInSeconds(&now, &slave->lastForceOperatingTime);
-                        if (elapsed >= slave->forceOperatingQueryS) {
-                            OCEM_INFO("[PS%d] Forced SA query (%.0fs elapsed)\n", slave->addr, elapsed);
-                            select_command(drv, slave, "SA", response, responseSize);
-                            slave->lastForceOperatingTime = now;
-                            didQuery = 1;
+                    } else {
+                        // Fallback: original behavior when only one type is enabled
+                        // Check if SL (state) query is due
+                        if (slave->pollStateEnabled) {
+                            double slQueryInterval = slave->pollStateIntervalS;
+                            if (slQueryInterval <= 0) slQueryInterval = 1.0;
+                            
+                            double elapsed = epicsTimeDiffInSeconds(&now, &slave->lastForceStateTime);
+                            if (elapsed >= slQueryInterval) {
+                                OCEM_INFO("[PS%d] Polling SL (%.1fs elapsed, interval=%.1fs)\n", 
+                                          slave->addr, elapsed, slQueryInterval);
+                                select_command(drv, slave, "SL", response, responseSize);
+                                slave->lastForceStateTime = now;
+                                didQuery = 1;
+                            }
+                        }
+                        
+                        // Check if SA (analog) query is due (only if we didn't just do SL)
+                        if (!didQuery && slave->pollAnalogEnabled) {
+                            double saQueryInterval = slave->pollAnalogIntervalS;
+                            if (saQueryInterval <= 0) saQueryInterval = 1.0;
+                            
+                            double elapsed = epicsTimeDiffInSeconds(&now, &slave->lastForceOperatingTime);
+                            if (elapsed >= saQueryInterval) {
+                                OCEM_INFO("[PS%d] Polling SA (%.1fs elapsed, interval=%.1fs)\n", 
+                                          slave->addr, elapsed, saQueryInterval);
+                                select_command(drv, slave, "SA", response, responseSize);
+                                slave->lastForceOperatingTime = now;
+                                didQuery = 1;
+                            }
                         }
                     }
                     
@@ -1560,6 +1911,14 @@ static void ocem_init(const char *port, const char *addrListStr) {
     drv->idlePollingPeriod = 1.0;     // 1s when idle (just monitoring)
     drv->activePollingPeriod = 0.1;   // 100ms when commands active
     drv->commandActiveTimeout = 5.0;  // Stay in active mode for 5s after last command
+    
+    // Initialization phase configuration
+    drv->initTimeoutS = 5.0;          // 5s timeout per PS before retry
+    drv->initMaxRetries = 3;          // 3 retries before marking PS failed
+    drv->initPollPeriod = 0.1;        // Fast polling during init
+    drv->currentInitSlaveIdx = 0;     // Start with first slave
+    drv->allSlavesInitialized = 0;    // Not yet initialized
+    
     int addrList[MAX_SLAVE];
     drv->ioLock = epicsMutexCreate();
     if (!drv->ioLock) {
@@ -1591,8 +1950,37 @@ static void ocem_init(const char *port, const char *addrListStr) {
 
         drv->addrList[i] = addr;
         drv->slaves[addr].addr = addr;
+        drv->slaves[addr].recordPrefix[0] = '\0';  // Will be set on first record read
         drv->slaves[addr].IMAX = -1;
         drv->slaves[addr].VMAX = -1;
+        
+        // Per-slave initialization state
+        drv->slaves[addr].initState = PS_INIT_NOT_STARTED;
+        drv->slaves[addr].initRetryCount = 0;
+        drv->slaves[addr].hasVER = 0;
+        drv->slaves[addr].hasPRG = 0;
+        drv->slaves[addr].hasSTA = 0;
+        drv->slaves[addr].hasCOR = 0;
+        drv->slaves[addr].hasTEN = 0;
+        strcpy(drv->slaves[addr].alarms, "NO ");  // Initialize to no alarms
+        
+        // Polling configuration - disabled by default
+        // Use database macros POLL_STATE and POLL_ANALOG to enable
+        drv->slaves[addr].pollStateEnabled = 0;
+        drv->slaves[addr].pollAnalogEnabled = 0;
+        drv->slaves[addr].pollStateIntervalS = 1.0;
+        drv->slaves[addr].pollAnalogIntervalS = 1.0;
+        
+        // Poll ratio configuration defaults
+        // ratio = analog polls per state poll
+        // E.g., ratio=2.0 means 2 analog, 1 state per 3 cycles
+        drv->slaves[addr].pollRatioNormal = 2.0;    // ON: 2 analog, 1 state
+        drv->slaves[addr].pollRatioSet = 5.0;       // GOING_TO_SET: 5 analog, 1 state
+        drv->slaves[addr].pollRatioState = 0.33;    // CHANGE_POL/WAIT_POL: 1 analog, 3 state
+        drv->slaves[addr].pollRatioBalanced = 1.0;  // ZERO_STBY: 1 analog, 1 state
+        drv->slaves[addr].pollCycleCounter = 0;
+        drv->slaves[addr].pollAnalogCount = 0;
+        drv->slaves[addr].pollStateCount = 0;
         
         // Set default PRG values so current/voltage can be calculated immediately
         // These will be updated when actual PRG data is received from polling
@@ -1684,6 +2072,20 @@ void ocem_setPollingRates(double idlePeriod, double activePeriod, double activeT
            drv->idlePollingPeriod, drv->activePollingPeriod, drv->commandActiveTimeout);
 }
 
+/* --- Set init timeout/retries command --- */
+static void ocem_setInitParams(double timeoutS, int maxRetries)
+{
+    if (!drv) {
+        errlogPrintf("ocemSetInitParams: driver not initialized\n");
+        return;
+    }
+    if (timeoutS >= 0) drv->initTimeoutS = timeoutS;
+    if (maxRetries >= 0) drv->initMaxRetries = maxRetries;
+    
+    printf("OCEM Init params: timeout=%.1fs, maxRetries=%d\n",
+           drv->initTimeoutS, drv->initMaxRetries);
+}
+
 /* --- Set debug level command --- */
 static void ocem_setDebugLevel(int level)
 {
@@ -1704,6 +2106,14 @@ static void pollCall(const iocshArgBuf *args) {
     ocem_setPollingRates(args[0].dval, args[1].dval, args[2].dval);
 }
 
+static const iocshArg initParamArg0 = {"timeoutS", iocshArgDouble};
+static const iocshArg initParamArg1 = {"maxRetries", iocshArgInt};
+static const iocshArg *initParamArgs[2] = {&initParamArg0, &initParamArg1};
+static const iocshFuncDef initParamsFuncDef = {"ocemSetInitParams", 2, initParamArgs};
+static void initParamsCall(const iocshArgBuf *args) {
+    ocem_setInitParams(args[0].dval, args[1].ival);
+}
+
 static const iocshArg debugArg0 = {"level", iocshArgInt};
 static const iocshArg *debugArgs[1] = {&debugArg0};
 static const iocshFuncDef debugFuncDef = {"ocemSetDebug", 1, debugArgs};
@@ -1714,6 +2124,7 @@ static void debugCall(const iocshArgBuf *args) {
 static void drvOCEMRegister(void) {
     iocshRegister(&initFuncDef, initCall);
     iocshRegister(&pollFuncDef, pollCall);
+    iocshRegister(&initParamsFuncDef, initParamsCall);
     iocshRegister(&debugFuncDef, debugCall);
 }
 epicsExportRegistrar(drvOCEMRegister);
