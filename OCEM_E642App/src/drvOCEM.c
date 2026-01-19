@@ -1389,7 +1389,21 @@ void unimag_setStateSP(OCEM_Slave *slave, ChannelState state)
     slave->unimag.busy = 1;
     unimag_startTimer(slave);
     
-    if (state == CH_STANDBY && slave->channelState == CH_ON) {
+    if (state == CH_RESET) {
+        // RESET command: clear state machine errors and send RES command
+        // This cancels STATE_NOT_REACHED and SET_NOT_REACHED errors
+        OCEM_INFO("[PS%d] UNIMAG: RESET - clearing state machine errors\n", slave->addr);
+        
+        // Clear the error state - go back to OK
+        unimag_setState(slave, UNIMAG_OK, "Reset - errors cleared");
+        
+        // Clear busy flag - reset is immediate
+        slave->unimag.busy = 0;
+        
+        // Update unimagStatus to clear any error display (will be updated on next STA)
+        slave->unimagStatus = 3;  // RESET status
+        
+    } else if (state == CH_STANDBY && slave->channelState == CH_ON) {
         // Going from ON to STANDBY - need to ramp to zero first if not already
         if (fabs(slave->currentRB) > slave->unimagCfg.zeroTolerance) {
             unimag_setState(slave, UNIMAG_ZERO_STBY, "Ramping to zero before STANDBY");
