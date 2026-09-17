@@ -83,9 +83,9 @@ STATE_RB Possible values:
 0 OFF – Magnet is powered off
 1 ON – Magnet is powered and active
 2 STANDBY – Magnet is in standby mode
-3 RESET – Reset operation in progress
-4 FAULT/INTERLOCK alert MAJOR – A fault condition has been detected by PS (the detail should be depends on the alarm bit)
-5 ERROR alert MAJOR - An error as been detected by IOC like unconnected
+3 FAULT alert MAJOR – Internal power-supply fault (not caused by an external interlock)
+4 EXT_INTLK alert MAJOR – Triggered by an external interlock reported by the power supply
+5 CONN_FAULT alert MAJOR - Triggered by an IOC-to-power-supply communication error
 6 SETPOINT_NOT_REACHED alert Minor - A set point has not been reached within the defined error
 7 STATE_NOT_REACHED alert Major - A state has not been reached
 
@@ -387,7 +387,7 @@ Map failures to EPICS alarm severities:
 Condition	PV	Severity
 Timeout (retrying)	UNIMAG_STATE_RB	MINOR
 STATE_NOT_REACHED	UNIMAG_STATE_RB	MAJOR
-FAULT	STATE_RB	INVALID
+FAULT	STATE_RB	MAJOR
 3. Add a Busy Indicator
 
 Add:

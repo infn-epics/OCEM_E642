@@ -185,12 +185,13 @@ record(mbbi, "$(P):$(R):STATE_RB") {
     field(TWVL, "2")
     field(TWST, "STANDBY")
     field(THVL, "3")
-    field(THST, "RESET")
+    field(THST, "FAULT")
+    field(THSV, "MAJOR")
     field(FRVL, "4")
-    field(FRST, "INTERLOCK")
+    field(FRST, "EXT_INTLK")
     field(FRSV, "MAJOR") 
     field(FVVL, "5")
-    field(FVST, "ERROR")
+    field(FVST, "CONN_FAULT")
     field(FVSV, "MAJOR")
     field(SXVL, "6")
     field(SXST, "SP_NOT_REACHED")
@@ -382,6 +383,16 @@ record(mbbo, "$(P):$(R):STATE_SP") {
     field(TWST, "STANDBY")
     field(THVL, "3")
     field(THST, "RESET")
+    field(FLNK, "$(P):$(R):state_router0")
+}
+
+# State routing - OFF is treated exactly like STANDBY for the soft setpoint interface
+record(calcout, "$(P):$(R):state_router0") {
+    field(DESC, "Route OFF to STANDBY")
+    field(INPA, "$(P):$(R):STATE_SP")
+    field(CALC, "A=0")
+    field(OOPT, "When Non-zero")
+    field(OUT,  "$(P):$(R):SetSTANDBY.PROC PP")
     field(FLNK, "$(P):$(R):state_router")
 }
 
@@ -413,6 +424,7 @@ record(calcout, "$(P):$(R):state_router2") {
     field(CALC, "A=3")
     field(OOPT, "When Non-zero")
     field(OUT,  "$(P):$(R):RESET_ALARMS.PROC PP")
+    field(FLNK, "$(P):$(R):STATE_SP_OUT")
 }
 
 # State setpoint command forwarder (for driver state machine)

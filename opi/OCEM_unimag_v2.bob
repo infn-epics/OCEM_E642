@@ -390,7 +390,7 @@
         <action type="write_pv">
           <description>Reset</description>
           <pv_name>$(P):$(R):STATE_SP</pv_name>
-          <value>4</value>
+          <value>3</value>
         </action>
       </actions>
       <text>RESET</text>

@@ -282,6 +282,7 @@ void unimag_init(OCEM_Slave *slave);
 void unimag_setCurrentSP(OCEM_Slave *slave, double currentA);
 void unimag_setStateSP(OCEM_Slave *slave, ChannelState state);
 void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave);
+void unimag_setConnectionFault(OCEM_Slave *slave);
 const char* unimag_getStateName(UnimagState state);
 const char* unimag_getChannelStateName(ChannelState state);
 int ocem_sendThreshold(OCEM_Slave *slave, int channel, double valueA);

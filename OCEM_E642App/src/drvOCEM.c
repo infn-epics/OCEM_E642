@@ -150,27 +150,25 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         slave->hasSTA = 1;  // Mark STA received for initialization tracking
 
         // Determine base unimagStatus from PS status
-        // Values: 0=OFF, 1=ON, 2=STANDBY, 3=RESET, 4=INTERLOCK, 5=ERROR, 6=SETPOINT_NOT_REACHED, 7=STATE_NOT_REACHED
+        // Values: 0=OFF, 1=ON, 2=STANDBY, 3=FAULT, 4=EXT_INTLK, 5=CONN_FAULT, 6=SETPOINT_NOT_REACHED, 7=STATE_NOT_REACHED
         if (strcmp(val, "ATT") == 0)
             slave->unimagStatus = 1;  // ON
         else if (strcmp(val, "STB") == 0)
             slave->unimagStatus = 2;  // STANDBY
-        else if (strcmp(val, "RES") == 0)
-            slave->unimagStatus = 3;  // RESET
         else if (strcmp(val, "OFF") == 0)
             slave->unimagStatus = 0;  // OFF
         else
-            slave->unimagStatus = 5;  // ERROR (unknown state)
+            slave->unimagStatus = 3;  // FAULT (valid STA reports a non-normal HW state)
 
-        // Override with INTERLOCK if alarms are present
+        // Override with EXT_INTLK if alarms are present
         // Check if alarms string is non-empty AND doesn't start with "NO"
         if (slave->alarms[0] != '\0' && strncmp(slave->alarms, "NO", 2) != 0)
         {
-            slave->unimagStatus = 4;  // INTERLOCK
+            slave->unimagStatus = 4;  // EXT_INTLK
         }
         
-        // Override with STATE_NOT_REACHED if UNIMAG state machine indicates failure
-        if (slave->unimag.state == UNIMAG_NOT_REACHED)
+        // Report STATE_NOT_REACHED only when no higher-priority interlock exists.
+        if (!slave->hasAlarm && slave->unimag.state == UNIMAG_NOT_REACHED)
         {
             slave->unimagStatus = 7;  // STATE_NOT_REACHED
         }
@@ -251,6 +249,27 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
                          slave->addr, val, slave->alarmMask);
             }
         }
+
+        // Reflect an external interlock immediately; do not wait for the next
+        // STA response. When it clears, restore the most recent valid state.
+        if (slave->hasAlarm) {
+            slave->unimagStatus = 4;  // EXT_INTLK
+            scanIoRequest(slave->ioscanStatus);
+        } else if (slave->unimagStatus == 4) {
+            if (slave->unimag.state == UNIMAG_NOT_REACHED)
+                slave->unimagStatus = 7;  // STATE_NOT_REACHED
+            else if (strcmp(slave->status, "ATT") == 0)
+                slave->unimagStatus = 1;  // ON
+            else if (strcmp(slave->status, "STB") == 0)
+                slave->unimagStatus = 2;  // STANDBY
+            else if (strcmp(slave->status, "OFF") == 0)
+                slave->unimagStatus = 0;  // OFF
+            else if (slave->hasSTA)
+                slave->unimagStatus = 3;  // FAULT
+            else
+                slave->unimagStatus = 5;  // CONN_FAULT
+            scanIoRequest(slave->ioscanStatus);
+        }
         
         scanIoRequest(slave->ioscanAlarms);
     }
@@ -318,6 +337,19 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
     }
 
 
+}
+
+// Report an IOC-to-power-supply communication failure through STATE_RB.
+// A subsequent valid STA reply replaces this with the current hardware state.
+void unimag_setConnectionFault(OCEM_Slave *slave)
+{
+    if (!slave) return;
+
+    if (slave->unimagStatus != 5) {
+        OCEM_ERR("[PS%d] UNIMAG: STATE_RB -> CONN_FAULT\n", slave->addr);
+        slave->unimagStatus = 5;
+        scanIoRequest(slave->ioscanStatus);
+    }
 }
 /**
  * parseIntList - converte una stringa separata da virgole in un array di int
@@ -564,6 +596,7 @@ int select_command(OCEM_Driver* drv, OCEM_Slave* slave, const char* specificCmd,
     if (status != asynSuccess) 
     {
         OCEM_ERR("[PS%d] SELECT: ENQ write error\n", slave->addr);
+        unimag_setConnectionFault(slave);
         return -1;
     }
     epicsThreadSleep(0.02);
@@ -573,6 +606,7 @@ int select_command(OCEM_Driver* drv, OCEM_Slave* slave, const char* specificCmd,
     if (status != asynSuccess || nbytesIn == 0) 
     {
         OCEM_INFO("[PS%d] SELECT: timeout waiting for ACK\n", slave->addr);
+        unimag_setConnectionFault(slave);
         return -1;
     }
     else
@@ -580,6 +614,7 @@ int select_command(OCEM_Driver* drv, OCEM_Slave* slave, const char* specificCmd,
         if (ackBuf[0] != 0x06) 
         { // 0x06 = ACK
             OCEM_INFO("[PS%d] SELECT: got NAK (0x%02X)\n", slave->addr, ackBuf[0]);
+            unimag_setConnectionFault(slave);
             return -1;
         }
         OCEM_DETAIL("[PS%d] SELECT: got ACK\n", slave->addr);
@@ -603,6 +638,7 @@ int select_command(OCEM_Driver* drv, OCEM_Slave* slave, const char* specificCmd,
     
     if (status != asynSuccess) {
         OCEM_ERR("[PS%d] SELECT: cmd write error\n", slave->addr);
+        unimag_setConnectionFault(slave);
         return -1;
     }
     epicsThreadSleep(0.02);
@@ -611,6 +647,7 @@ int select_command(OCEM_Driver* drv, OCEM_Slave* slave, const char* specificCmd,
     status = drv->pasynOctet->read(drv->pasynInterface->drvPvt,drv->pasynUser, response,1,  &nbytesIn, &eomReason);
     if (status != asynSuccess) {
         OCEM_INFO("[PS%d] SELECT: no ACK for cmd '%s'\n", slave->addr, cmd);
+        unimag_setConnectionFault(slave);
         return -1;
     }
     
@@ -639,6 +676,7 @@ int poll_request(OCEM_Driver* drv,OCEM_Slave* slave,char*response,size_t respons
     status = drv->pasynOctet->write(drv->pasynInterface->drvPvt,drv->pasynUser, (const char*)msg, msgLen, &nbytesOut);
     if (status != asynSuccess) {
         OCEM_ERR("[PS%d] POLL: write error\n", slave->addr);
+        unimag_setConnectionFault(slave);
         return -1;
     }
     epicsThreadSleep(0.02);
@@ -656,6 +694,7 @@ int poll_request(OCEM_Driver* drv,OCEM_Slave* slave,char*response,size_t respons
         { 
             OCEM_INFO("[PS%d] POLL: short response, nbytes=%zu, byte=0x%02X\n", 
                      slave->addr, nbytesIn, (unsigned char)response[0]);
+            unimag_setConnectionFault(slave);
             retVal = -1;
         }
     }
@@ -674,12 +713,14 @@ int poll_request(OCEM_Driver* drv,OCEM_Slave* slave,char*response,size_t respons
         status = drv->pasynOctet->write(drv->pasynInterface->drvPvt,drv->pasynUser, (const char*)msg, 1, &nbytesOut);
         if (status != asynSuccess) {
             OCEM_ERR("[PS%d] POLL: ACK write error\n", slave->addr);
+            unimag_setConnectionFault(slave);
             return -1;
         }
         char meot[2];
         status =  drv->pasynOctet->read(drv->pasynInterface->drvPvt,drv->pasynUser, meot,1,  &nbytesIn, &eomReason);
         if (status != asynSuccess) {
             OCEM_INFO("[PS%d] POLL: EOT read error\n", slave->addr);
+            unimag_setConnectionFault(slave);
             return -1;
         }
     }
@@ -1396,12 +1437,27 @@ void unimag_setStateSP(OCEM_Slave *slave, ChannelState state)
         
         // Clear the error state - go back to OK
         unimag_setState(slave, UNIMAG_OK, "Reset - errors cleared");
+
+        if (slave->hasAlarm) {
+            slave->unimagStatus = 4;
+        } else if (strcmp(slave->status, "ATT") == 0) {
+            slave->unimagStatus = 1;
+        } else if (strcmp(slave->status, "STB") == 0) {
+            slave->unimagStatus = 2;
+        } else if (strcmp(slave->status, "OFF") == 0) {
+            slave->unimagStatus = 0;
+        } else if (slave->hasSTA) {
+            slave->unimagStatus = 3;
+        } else {
+            slave->unimagStatus = 5;
+        }
+        scanIoRequest(slave->ioscanStatus);
         
         // Clear busy flag - reset is immediate
         slave->unimag.busy = 0;
         
-        // Update unimagStatus to clear any error display (will be updated on next STA)
-        slave->unimagStatus = 3;  // RESET status
+        // RESET is a command, not a hardware readback state. STATE_RB is
+        // refreshed by the next STA response.
         
     } else if (state == CH_STANDBY && slave->channelState == CH_ON) {
         // Going from ON to STANDBY - need to ramp to zero first if not already
@@ -1727,6 +1783,7 @@ static void ocem_polling(void *arg) {
                                     OCEM_ERR("[PS%d] === Initialization FAILED after %d retries ===\n", 
                                              addr, drv->initMaxRetries);
                                     slave->initState = PS_INIT_FAILED;
+                                    unimag_setConnectionFault(slave);
                                     slave->unimag.state = UNIMAG_NOT_REACHED;
                                     strcpy(slave->unimag.statusMsg, "Init failed");
                                     scanIoRequest(slave->ioscanUnimag);

@@ -289,6 +289,7 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
     if (status != asynSuccess) {
         OCEM_ERR("[PS%d] CMD: ENQ write error\n", slaveAddress);
         if (slave) {
+            unimag_setConnectionFault(slave);
             slave->cmdState = CMD_NOT_REACHED;
             snprintf(slave->cmdStatusMsg, sizeof(slave->cmdStatusMsg), "FAILED: ENQ write error");
             scanIoRequest(slave->ioscanCmdState);
@@ -318,6 +319,7 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
         OCEM_ERR("[PS%d] CMD: expected ACK but got 0x%02X (nbytes=%zu)\n", 
                 slaveAddress, (unsigned char)response[0], nbytesIn);
         if (slave) {
+            unimag_setConnectionFault(slave);
             slave->cmdState = CMD_NOT_REACHED;
             snprintf(slave->cmdStatusMsg, sizeof(slave->cmdStatusMsg), "FAILED: No ACK (got 0x%02X)", (unsigned char)response[0]);
             scanIoRequest(slave->ioscanCmdState);
@@ -461,6 +463,8 @@ int createCommand(char* outCmd,stringoutRecord *rec )
         sprintf(outCmd,"ON");
     else if (!strcmp(p->var,"STB"))
         sprintf(outCmd,"STB");
+    else if (!strcmp(p->var,"OFF"))
+        sprintf(outCmd,"OFF");
     else if (!strcmp(p->var,"STR"))
         sprintf(outCmd,"STR");
     else if (!strcmp(p->var,"RES"))
@@ -559,12 +563,6 @@ static long so_write(stringoutRecord *prec)
         OCEM_Slave* slave = findSlave(drv, p->addr);
         if (!slave) return -1;
         
-        // Check if busy
-        if (slave->unimag.busy) {
-            errlogPrintf("UNIMAG_STATE_SP: rejected (busy)\n");
-            return -1;
-        }
-        
         ChannelState targetState = CH_OFF;
         if (strcasecmp(prec->val, "ON") == 0) {
             targetState = CH_ON;
@@ -574,6 +572,12 @@ static long so_write(stringoutRecord *prec)
             targetState = CH_RESET;
         } else {
             errlogPrintf("UNIMAG_STATE_SP: invalid state '%s'\n", prec->val);
+            return -1;
+        }
+
+        // Check if busy - but always allow RESET to clear errors
+        if (slave->unimag.busy && targetState != CH_RESET) {
+            errlogPrintf("UNIMAG_STATE_SP: rejected (busy)\n");
             return -1;
         }
         
@@ -914,12 +918,27 @@ static long longout_write(longoutRecord *prec)
         slave->unimagCfg.maxRetries = prec->val;
         errlogPrintf("UNIMAG[%d]: max_retries = %d\n", p->addr, (int)prec->val);
     } else if (strcasecmp(p->var, "UNIMAG_STATE_SP") == 0) {
-        // longout for state setpoint by number
-        if (slave->unimag.busy) {
+        ChannelState targetState;
+        switch (prec->val) {
+            case 0:
+            case 2:
+                targetState = CH_STANDBY;
+                break;
+            case 1:
+                targetState = CH_ON;
+                break;
+            case 3:
+            case CH_RESET:
+                targetState = CH_RESET;
+                break;
+            default:
+                errlogPrintf("UNIMAG_STATE_SP: invalid state %ld\n", prec->val);
+                return -1;
+        }
+        if (slave->unimag.busy && targetState != CH_RESET) {
             errlogPrintf("UNIMAG_STATE_SP: rejected (busy)\n");
             return -1;
         }
-        ChannelState targetState = (ChannelState)prec->val;
         epicsMutexLock(drv->ioLock);
         unimag_setStateSP(slave, targetState);
         epicsMutexUnlock(drv->ioLock);
