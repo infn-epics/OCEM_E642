@@ -277,17 +277,17 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
         scanIoRequest(slave->ioscanCmdState);
     }
     
-    OCEM_INFO("[PS%d] CMD: sending '%s'\n", slaveAddress, cmd);
+    OCEM_INFO("[%s] CMD: sending '%s'\n", ocem_slaveTag(slaveAddress), cmd);
     
     msg[0] = 0x05;        // ENQ
     msg[1] = (unsigned char) (slaveAddress+0x60);
     msgLen = 2;
     
-    OCEM_DETAIL("[PS%d] CMD: ENQ+0x%02X\n", slaveAddress, msg[1]);
+    OCEM_DETAIL("[%s] CMD: ENQ+0x%02X\n", ocem_slaveTag(slaveAddress), msg[1]);
     
     status = drv->pasynOctet->write(drv->pasynInterface->drvPvt,drv->pasynUser, (const char*)msg, msgLen, &nbytesOut);
     if (status != asynSuccess) {
-        OCEM_ERR("[PS%d] CMD: ENQ write error\n", slaveAddress);
+        OCEM_ERR("[%s] CMD: ENQ write error\n", ocem_slaveTag(slaveAddress));
         if (slave) {
             unimag_setConnectionFault(slave);
             slave->cmdState = CMD_NOT_REACHED;
@@ -311,13 +311,13 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
     
     if ((nbytesIn == 1) && ( (unsigned char)response[0]==0x6))
     {
-        OCEM_DETAIL("[PS%d] CMD: got ACK\n", slaveAddress);
+        OCEM_DETAIL("[%s] CMD: got ACK\n", ocem_slaveTag(slaveAddress));
         retVal= 0;
     }
     else
     { 
-        OCEM_ERR("[PS%d] CMD: expected ACK but got 0x%02X (nbytes=%zu)\n", 
-                slaveAddress, (unsigned char)response[0], nbytesIn);
+        OCEM_ERR("[%s] CMD: expected ACK but got 0x%02X (nbytes=%zu)\n", 
+                ocem_slaveTag(slaveAddress), (unsigned char)response[0], nbytesIn);
         if (slave) {
             unimag_setConnectionFault(slave);
             slave->cmdState = CMD_NOT_REACHED;
@@ -342,7 +342,7 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
         msg[3 + cmdLen] = cdc;
         msgLen = 4 + cmdLen;
         
-        OCEM_INFO("[PS%d] CMD: >>> '%s' >>>\n", slaveAddress, cmd);
+        OCEM_INFO("[%s] CMD: >>> '%s' >>>\n", ocem_slaveTag(slaveAddress), cmd);
         
         status = drv->pasynOctet->write(drv->pasynInterface->drvPvt,drv->pasynUser, (const char*)msg, msgLen, &nbytesOut);
         epicsThreadSleep(0.02);
@@ -351,11 +351,11 @@ int send_command(OCEM_Driver* drv,int slaveAddress,char* cmd,char*response,size_
         status = drv->pasynOctet->read(drv->pasynInterface->drvPvt,drv->pasynUser, response,responseSize-1,  &nbytesIn, &eomReason);
         if (status != asynSuccess) 
         {
-            OCEM_DETAIL("[PS%d] CMD: no response after command\n", slaveAddress);
+            OCEM_DETAIL("[%s] CMD: no response after command\n", ocem_slaveTag(slaveAddress));
         }
         else
         {
-            OCEM_DETAIL("[PS%d] CMD: response='%s'\n", slaveAddress, response);
+            OCEM_DETAIL("[%s] CMD: response='%s'\n", ocem_slaveTag(slaveAddress), response);
         }
         
         // Command sent successfully - set to VERIFYING state

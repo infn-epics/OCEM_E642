@@ -147,6 +147,8 @@ typedef struct {
 
 typedef struct {
     int addr;           // indirizzo slave
+    char name[32];      // Logical name set with ocemSetName (e.g., "DHPTT001"), empty if unset
+    char tag[48];       // Log tag: "NAME/PS<addr>" if name is set, else "PS<addr>"
     char recordPrefix[80];  // Record name prefix (e.g., "BTF:MAG:OCEME642:QUATB102")
     char lastSelCommand[32];
     char status[40];
@@ -276,6 +278,8 @@ OCEM_Slave* findSlave(OCEM_Driver* drv,int slaveAddress);
 void pad_value(const char *value, char *output);
 int queue_command(OCEM_Driver* drv, int slaveAddr, const char* cmd);
 void ocem_setPollingRates(double idlePeriod, double activePeriod, double activeTimeout);
+// Log tag of a slave, used in place of "PS<addr>" in every log line
+const char *ocem_slaveTag(int addr);
 
 // UNIMAG state machine functions
 void unimag_init(OCEM_Slave *slave);
