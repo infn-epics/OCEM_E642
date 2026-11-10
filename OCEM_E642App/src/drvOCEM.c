@@ -54,12 +54,6 @@ int parsePRGAnswer(const char*answer,char*chan,int* minval,int*maxval)
 
 }
 
-// STATE_RB value for a failed command: 6=SP_NOT_REACHED, 7=ST_NOT_REACHED
-static int unimag_notReachedStatus(const OCEM_Slave *slave)
-{
-    return slave->unimag.setpointFailed ? 6 : 7;
-}
-
 // Helper to verify if command was applied based on status
 static void verifyCommandApplied(OCEM_Slave *slave)
 {
@@ -156,7 +150,8 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         slave->hasSTA = 1;  // Mark STA received for initialization tracking
 
         // Determine base unimagStatus from PS status
-        // Values: 0=OFF, 1=ON, 2=STANDBY, 3=FAULT, 4=EXT_INTLK, 5=CONN_FAULT, 6=SETPOINT_NOT_REACHED, 7=STATE_NOT_REACHED
+        // Values: 0=OFF, 1=ON, 2=STANDBY, 3=FAULT, 4=EXT_INTLK, 5=CONN_FAULT.
+        // A failed command is reported by STATE_SM (SPNOTSET / STATENOTSET), not here.
         if (strcmp(val, "ATT") == 0)
             slave->unimagStatus = 1;  // ON
         else if (strcmp(val, "STB") == 0)
@@ -171,12 +166,6 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
         if (slave->alarms[0] != '\0' && strncmp(slave->alarms, "NO", 2) != 0)
         {
             slave->unimagStatus = 4;  // EXT_INTLK
-        }
-        
-        // Report a failed command only when no higher-priority interlock exists.
-        if (!slave->hasAlarm && slave->unimag.state == UNIMAG_NOT_REACHED)
-        {
-            slave->unimagStatus = unimag_notReachedStatus(slave);
         }
         
         scanIoRequest(slave->ioscanStatus);
@@ -262,9 +251,7 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
             slave->unimagStatus = 4;  // EXT_INTLK
             scanIoRequest(slave->ioscanStatus);
         } else if (slave->unimagStatus == 4) {
-            if (slave->unimag.state == UNIMAG_NOT_REACHED)
-                slave->unimagStatus = unimag_notReachedStatus(slave);
-            else if (strcmp(slave->status, "ATT") == 0)
+            if (strcmp(slave->status, "ATT") == 0)
                 slave->unimagStatus = 1;  // ON
             else if (strcmp(slave->status, "STB") == 0)
                 slave->unimagStatus = 2;  // STANDBY

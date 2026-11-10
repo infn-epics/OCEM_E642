@@ -193,12 +193,6 @@ record(mbbi, "$(P):$(R):STATE_RB") {
     field(FVVL, "5")
     field(FVST, "CONN_FAULT")
     field(FVSV, "MAJOR")
-    field(SXVL, "6")
-    field(SXST, "SP_NOT_REACHED")
-    field(SXSV, "MINOR")
-    field(SVVL, "7")
-    field(SVST, "ST_NOT_REACHED")
-    field(SVSV, "MAJOR")
 }
 
 
