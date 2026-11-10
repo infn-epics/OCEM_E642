@@ -450,7 +450,7 @@ record(longin, "$(P):$(R):SM_STATE_RAW") {
 }
 
 # Enumerated state machine state
-# Values match UnimagState enum: INIT=0, OK=1, NOT_REACHED=2, ZERO_STBY=3, CHANGE_POL=4, WAIT_POL=5, GOING_TO_SET=6
+# Values match UnimagState enum: INIT=0, OK=1, NOT_REACHED=2, ZERO_STBY=3, CHANGE_POL=4, WAIT_POL=5, GOING_TO_SET=6, GOING_TO_STATE=7
 record(mbbi, "$(P):$(R):SM_STATE_RB") {
     field(DESC, "State machine status")
     field(INP,  "$(P):$(R):SM_STATE_RAW NPP NMS")
@@ -476,6 +476,42 @@ record(mbbi, "$(P):$(R):SM_STATE_RB") {
     field(SXVL, "6")
     field(SXST, "GOING_TO_SET")
     field(SXSV, "NO_ALARM")
+    field(SVVL, "7")
+    field(SVST, "GOING_TO_STATE")
+    field(SVSV, "NO_ALARM")
+}
+
+# UNIMAG unified state machine (see unimag-opi README)
+record(longin, "$(P):$(R):STATE_SM_RAW") {
+    field(DESC, "Unimag state machine raw")
+    field(DTYP, "OCEME642")
+    field(INP,  "@$(ADDR) STATE_SM")
+    field(SCAN, "I/O Intr")
+    field(FLNK, "$(P):$(R):STATE_SM")
+}
+
+record(mbbi, "$(P):$(R):STATE_SM") {
+    field(DESC, "Unimag state machine")
+    field(INP,  "$(P):$(R):STATE_SM_RAW NPP NMS")
+    field(SCAN, "Passive")
+    field(ZRVL, "0")
+    field(ZRST, "READY")
+    field(ONVL, "1")
+    field(ONST, "GOTOSET")
+    field(TWVL, "2")
+    field(TWST, "GOTOSTATE")
+    field(THVL, "3")
+    field(THST, "GOZERO")
+    field(FRVL, "4")
+    field(FRST, "GOPOS")
+    field(FVVL, "5")
+    field(FVST, "GONEG")
+    field(SXVL, "6")
+    field(SXST, "SPNOTSET")
+    field(SXSV, "MINOR")
+    field(SVVL, "7")
+    field(SVST, "STATENOTSET")
+    field(SVSV, "MAJOR")
 }
 
 # (CHANNEL_STATE removed - use STATE_RB instead)
@@ -543,10 +579,7 @@ record(longin, "$(P):$(R):RETRY_COUNT") {
 #   ZERO_TOLERANCE=1     - Allowed tolerance when checking that current is zero
 #   SET_TIMEOUT_S=10     - Timeout (seconds) to verify requested current reached
 #   INIT_TIMEOUT_S=60    - Timeout (seconds) before retrying PRG initialization
-#
-# NOTE: Retry logic has been removed to simplify operation.
-# If timeout occurs, operation fails immediately. Retries were masking
-# underlying communication issues on the RS485 bus.
+#   RETRY=3              - Times a command not applied within SET_TIMEOUT_S is sent again
 
 # Set tolerance (Amperes) - Allowed tolerance on CURRENT_RB when checking if requested current reached
 record(ao, "$(P):$(R):set_tolerance") {
@@ -590,6 +623,19 @@ record(ao, "$(P):$(R):set_timeout_s") {
     field(DRVH, "300")
     field(HOPR, "300")
     field(LOPR, "1")
+    field(PINI, "YES")
+}
+
+# Number of times a command not applied within set_timeout_s is sent again
+record(longout, "$(P):$(R):RETRY") {
+    field(DESC, "Command retries")
+    field(DTYP, "OCEME642")
+    field(OUT,  "@$(ADDR) MAX_RETRIES")
+    field(VAL,  "$(RETRY=3)")
+    field(DRVL, "0")
+    field(DRVH, "10")
+    field(HOPR, "10")
+    field(LOPR, "0")
     field(PINI, "YES")
 }
 

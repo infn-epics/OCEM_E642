@@ -116,8 +116,21 @@ typedef enum {
     UNIMAG_ZERO_STBY = 3,       // Ramping down to zero current
     UNIMAG_CHANGE_POL = 4,      // Waiting for STANDBY before polarity change
     UNIMAG_WAIT_POL = 5,        // Waiting for polarity change to complete
-    UNIMAG_GOING_TO_SET = 6     // Ramping toward requested setpoint
+    UNIMAG_GOING_TO_SET = 6,    // Ramping toward requested setpoint
+    UNIMAG_GOING_TO_STATE = 7   // Waiting for the commanded ON/STANDBY state
 } UnimagState;
+
+// Unified UNIMAG state machine value published in STATE_SM
+typedef enum {
+    SM_READY = 0,           // Idle, last command done
+    SM_GOTOSET = 1,         // Going to the current setpoint
+    SM_GOTOSTATE = 2,       // Going to the commanded state
+    SM_GOZERO = 3,          // Going to zero current
+    SM_GOPOS = 4,           // Changing polarity to positive
+    SM_GONEG = 5,           // Changing polarity to negative
+    SM_SPNOTSET = 6,        // Setpoint not reached (MINOR alarm)
+    SM_STATENOTSET = 7      // State not reached (MAJOR alarm)
+} StateSM;
 
 // UNIMAG configuration parameters (per slave)
 typedef struct {
@@ -133,6 +146,7 @@ typedef struct {
 typedef struct {
     UnimagState state;          // Current UNIMAG state
     int busy;                   // 1 = state machine active, 0 = idle
+    int setpointFailed;         // In NOT_REACHED: 1 = current not reached, 0 = state not reached
     int retryCount;             // Current retry counter
     double targetCurrent;       // Requested current setpoint (signed, in Amperes)
     int targetPolarity;         // Target polarity: +1, -1, or 0
@@ -287,6 +301,8 @@ void unimag_setCurrentSP(OCEM_Slave *slave, double currentA);
 void unimag_setStateSP(OCEM_Slave *slave, ChannelState state);
 void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave);
 void unimag_setConnectionFault(OCEM_Slave *slave);
+StateSM unimag_getStateSM(const OCEM_Slave *slave);
+int unimag_isBusy(const OCEM_Slave *slave);
 const char* unimag_getStateName(UnimagState state);
 const char* unimag_getChannelStateName(ChannelState state);
 int ocem_sendThreshold(OCEM_Slave *slave, int channel, double valueA);

@@ -54,6 +54,12 @@ int parsePRGAnswer(const char*answer,char*chan,int* minval,int*maxval)
 
 }
 
+// STATE_RB value for a failed command: 6=SP_NOT_REACHED, 7=ST_NOT_REACHED
+static int unimag_notReachedStatus(const OCEM_Slave *slave)
+{
+    return slave->unimag.setpointFailed ? 6 : 7;
+}
+
 // Helper to verify if command was applied based on status
 static void verifyCommandApplied(OCEM_Slave *slave)
 {
@@ -167,10 +173,10 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
             slave->unimagStatus = 4;  // EXT_INTLK
         }
         
-        // Report STATE_NOT_REACHED only when no higher-priority interlock exists.
+        // Report a failed command only when no higher-priority interlock exists.
         if (!slave->hasAlarm && slave->unimag.state == UNIMAG_NOT_REACHED)
         {
-            slave->unimagStatus = 7;  // STATE_NOT_REACHED
+            slave->unimagStatus = unimag_notReachedStatus(slave);
         }
         
         scanIoRequest(slave->ioscanStatus);
@@ -257,7 +263,7 @@ void ActivateInterrupt(int slaveId,char* cmd, char* val)
             scanIoRequest(slave->ioscanStatus);
         } else if (slave->unimagStatus == 4) {
             if (slave->unimag.state == UNIMAG_NOT_REACHED)
-                slave->unimagStatus = 7;  // STATE_NOT_REACHED
+                slave->unimagStatus = unimag_notReachedStatus(slave);
             else if (strcmp(slave->status, "ATT") == 0)
                 slave->unimagStatus = 1;  // ON
             else if (strcmp(slave->status, "STB") == 0)
@@ -1057,6 +1063,7 @@ static double getPollRatio(OCEM_Slave *slave)
             return slave->pollRatioSet;         // High analog ratio when ramping
         case UNIMAG_CHANGE_POL:
         case UNIMAG_WAIT_POL:
+        case UNIMAG_GOING_TO_STATE:
             return slave->pollRatioState;       // Low analog ratio during polarity change
         case UNIMAG_ZERO_STBY:
             return slave->pollRatioBalanced;    // Balanced during zero/standby
@@ -1142,6 +1149,7 @@ const char* unimag_getStateName(UnimagState state)
         case UNIMAG_CHANGE_POL:  return "CHANGE_POL";
         case UNIMAG_WAIT_POL:    return "WAIT_POL";
         case UNIMAG_GOING_TO_SET: return "GOING_TO_SET";
+        case UNIMAG_GOING_TO_STATE: return "GOING_TO_STATE";
         default:                 return "UNKNOWN";
     }
 }
@@ -1173,6 +1181,7 @@ void unimag_init(OCEM_Slave *slave)
     // PRG data from polling will update the values but calculation can start immediately
     slave->unimag.state = UNIMAG_OK;
     slave->unimag.busy = 0;
+    slave->unimag.setpointFailed = 0;
     slave->unimag.retryCount = 0;
     slave->unimag.targetCurrent = 0.0;
     slave->unimag.targetPolarity = 0;
@@ -1258,6 +1267,41 @@ static void unimag_setState(OCEM_Slave *slave, UnimagState newState, const char 
     
     OCEM_INFO("[%s] UNIMAG: %s - %s\n", ocem_slaveTag(slave->addr), unimag_getStateName(newState), msg);
     scanIoRequest(slave->ioscanUnimag);
+}
+
+// Helper to end the running command with a failure
+static void unimag_fail(OCEM_Slave *slave, int setpointFailed, const char *msg)
+{
+    slave->unimag.setpointFailed = setpointFailed;
+    slave->unimag.busy = 0;
+    unimag_setState(slave, UNIMAG_NOT_REACHED, msg);
+}
+
+// New commands are rejected while a sequence runs. Waiting for ON/STANDBY does
+// not block them, so an operator can always override a state being retried.
+int unimag_isBusy(const OCEM_Slave *slave)
+{
+    return slave->unimag.busy && slave->unimag.state != UNIMAG_GOING_TO_STATE;
+}
+
+// Value published in STATE_SM
+StateSM unimag_getStateSM(const OCEM_Slave *slave)
+{
+    switch (slave->unimag.state) {
+        case UNIMAG_NOT_REACHED:
+            return slave->unimag.setpointFailed ? SM_SPNOTSET : SM_STATENOTSET;
+        case UNIMAG_GOING_TO_SET:
+            return SM_GOTOSET;
+        case UNIMAG_GOING_TO_STATE:
+            return SM_GOTOSTATE;
+        case UNIMAG_ZERO_STBY:
+            return SM_GOZERO;
+        case UNIMAG_CHANGE_POL:
+        case UNIMAG_WAIT_POL:
+            return (slave->unimag.targetPolarity > 0) ? SM_GOPOS : SM_GONEG;
+        default:
+            return slave->unimag.busy ? SM_GOTOSTATE : SM_READY;
+    }
 }
 
 // Update channel state from raw status
@@ -1346,6 +1390,29 @@ static void unimag_startTimer(OCEM_Slave *slave)
     slave->unimag.lastCurrentRB = slave->currentRB;
 }
 
+// Start the next step of a sequence: it gets its own timer and retries
+static void unimag_nextStep(OCEM_Slave *slave)
+{
+    unimag_startTimer(slave);
+    slave->unimag.retryCount = 0;
+}
+
+// Account for a retry of the current step after a timeout.
+// Returns 1 if the command must be sent again, 0 if the step has failed.
+// An active alarm stops the retries: the IOC must not re-command a tripped supply.
+static int unimag_retry(OCEM_Slave *slave, const char *what)
+{
+    if (slave->hasAlarm || slave->unimag.retryCount >= slave->unimagCfg.maxRetries)
+        return 0;
+    
+    slave->unimag.retryCount++;
+    unimag_startTimer(slave);
+    OCEM_ERR("[%s] UNIMAG: %s - retry %d/%d\n", ocem_slaveTag(slave->addr), what,
+             slave->unimag.retryCount, slave->unimagCfg.maxRetries);
+    scanIoRequest(slave->ioscanUnimag);
+    return 1;
+}
+
 // Helper to send SP and STR commands for current setpoint
 // Returns 0 on success, -1 if PRG parameters not yet available
 static int unimag_sendSetpointCmd(OCEM_Slave *slave, double currentA)
@@ -1389,8 +1456,7 @@ void unimag_setCurrentSP(OCEM_Slave *slave, double currentA)
     // Check if PRG parameters are ready before accepting command
     if (slave->currentPrgH <= 0 || slave->IMAX <= 0 || !slave->unimag.prgInitialized) {
         OCEM_ERR("[%s] UNIMAG: Rejected - PRG parameters not initialized\n", ocem_slaveTag(slave->addr));
-        unimag_setState(slave, UNIMAG_NOT_REACHED, "PRG not initialized - wait for init");
-        scanIoRequest(slave->ioscanUnimag);
+        unimag_fail(slave, 1, "PRG not initialized - wait for init");
         return;
     }
     
@@ -1427,15 +1493,19 @@ void unimag_setStateSP(OCEM_Slave *slave, ChannelState state)
     
     slave->unimag.targetState = state;
     slave->unimag.retryCount = 0;
-    slave->unimag.busy = 1;
+    slave->unimag.busy = (state != CH_RESET);  // Reset is immediate
     unimag_startTimer(slave);
-    
+
     if (state == CH_RESET) {
-        // RESET command: clear state machine errors and send RES command
-        // This cancels STATE_NOT_REACHED and SET_NOT_REACHED errors
-        OCEM_INFO("[%s] UNIMAG: RESET - clearing state machine errors\n", ocem_slaveTag(slave->addr));
-        
-        // Clear the error state - go back to OK
+        // The RES command is sent to the hardware by the RESET_ALARMS record.
+        // Here every state machine is interrupted and brought back to idle,
+        // which also cancels the STATE_NOT_REACHED and SET_NOT_REACHED errors.
+        OCEM_INFO("[%s] UNIMAG: RESET - resetting state machines\n", ocem_slaveTag(slave->addr));
+
+        slave->Ostate = STATE_IDLE;
+        slave->cmdRetryCount = 0;
+        slave->cmdVerifyCount = 0;
+        setCmdState(slave, CMD_IDLE, "Reset");
         unimag_setState(slave, UNIMAG_OK, "Reset - errors cleared");
 
         if (slave->hasAlarm) {
@@ -1452,10 +1522,7 @@ void unimag_setStateSP(OCEM_Slave *slave, ChannelState state)
             slave->unimagStatus = 5;
         }
         scanIoRequest(slave->ioscanStatus);
-        
-        // Clear busy flag - reset is immediate
-        slave->unimag.busy = 0;
-        
+
         // RESET is a command, not a hardware readback state. STATE_RB is
         // refreshed by the next STA response.
         
@@ -1465,19 +1532,26 @@ void unimag_setStateSP(OCEM_Slave *slave, ChannelState state)
             unimag_setState(slave, UNIMAG_ZERO_STBY, "Ramping to zero before STANDBY");
         } else {
             // Already at zero, can go directly to STANDBY
-            unimag_setState(slave, UNIMAG_OK, "Transitioning to STANDBY");
+            unimag_setState(slave, UNIMAG_GOING_TO_STATE, "Going to STANDBY");
         }
     } else {
-        // Direct state transition
-        unimag_setState(slave, UNIMAG_OK, "State transition in progress");
+        // Direct state transition: the command is sent by the SetON/SetSTANDBY
+        // records, here it is verified against the status readback
+        unimag_setState(slave, UNIMAG_GOING_TO_STATE, "State transition in progress");
     }
     
     scanIoRequest(slave->ioscanUnimag);
 }
 
+static const char *unimag_polarityCmd(const OCEM_Slave *slave)
+{
+    return (slave->unimag.targetPolarity > 0) ? "POS" : "NEG";
+}
+
 // Process UNIMAG state machine (called from polling loop)
-// SIMPLIFIED: No retry logic - if timeout occurs, report failure immediately
-// Retries at this level mask underlying communication issues
+// A step not completed within set_timeout_s sends its command again up to
+// max_retries times, then the sequence fails. Each retry is logged as an error
+// so that communication problems stay visible.
 void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
 {
     char response[128];
@@ -1555,40 +1629,44 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
                 if (slave->unimag.targetPolarity != 0 && 
                     slave->unimag.targetPolarity != slave->integerPolarity) {
                     // Need polarity change - first go to STANDBY
-                    unimag_startTimer(slave);
+                    unimag_nextStep(slave);
                     unimag_setState(slave, UNIMAG_CHANGE_POL, "Going to STANDBY for polarity change");
                     send_command(drv, slave->addr, "STB", response, responseSize);
                 } else if (slave->unimag.targetState == CH_STANDBY) {
-                    // Transition to STANDBY complete
+                    // Zero reached - go to STANDBY and verify it
+                    unimag_nextStep(slave);
                     send_command(drv, slave->addr, "STB", response, responseSize);
-                    unimag_setState(slave, UNIMAG_OK, "Reached STANDBY");
-                    slave->unimag.busy = 0;
+                    unimag_setState(slave, UNIMAG_GOING_TO_STATE, "Going to STANDBY");
                 } else {
                     // Go to setpoint - send SP and STR commands
-                    unimag_startTimer(slave);
+                    unimag_nextStep(slave);
                     unimag_setState(slave, UNIMAG_GOING_TO_SET, "Ramping to setpoint");
                     unimag_sendSetpointCmd(slave, slave->unimag.targetCurrent);
                 }
             } else if (unimag_isTimeout(slave)) {
-                // Timeout - fail immediately (no retries)
-                char msg[80];
-                snprintf(msg, sizeof(msg), "Failed: Zero not reached (current=%.2fA) tolerance %.2fA", absCurrentRB, slave->unimagCfg.zeroTolerance);
-                unimag_setState(slave, UNIMAG_NOT_REACHED, msg);
-                slave->unimag.busy = 0;
+                if (unimag_retry(slave, "Zero not reached")) {
+                    unimag_sendSetpointCmd(slave, 0.0);
+                } else {
+                    char msg[80];
+                    snprintf(msg, sizeof(msg), "Failed: Zero not reached (current=%.2fA) tolerance %.2fA", absCurrentRB, slave->unimagCfg.zeroTolerance);
+                    unimag_fail(slave, 1, msg);
+                }
             }
             break;
-            
+
         case UNIMAG_CHANGE_POL:
             // Waiting for STANDBY status before sending polarity command
             if (slave->channelState == CH_STANDBY) {
                 // In STANDBY - now send polarity command
-                unimag_startTimer(slave);
-                const char *polCmd = (slave->unimag.targetPolarity > 0) ? "POS" : "NEG";
-                send_command(drv, slave->addr, (char*)polCmd, response, responseSize);
+                unimag_nextStep(slave);
+                send_command(drv, slave->addr, (char*)unimag_polarityCmd(slave), response, responseSize);
                 unimag_setState(slave, UNIMAG_WAIT_POL, "Waiting for polarity change");
             } else if (unimag_isTimeout(slave)) {
-                unimag_setState(slave, UNIMAG_NOT_REACHED, "Failed: STANDBY not reached for polarity change");
-                slave->unimag.busy = 0;
+                if (unimag_retry(slave, "STANDBY not reached")) {
+                    send_command(drv, slave->addr, "STB", response, responseSize);
+                } else {
+                    unimag_fail(slave, 0, "Failed: STANDBY not reached for polarity change");
+                }
             }
             break;
             
@@ -1596,13 +1674,16 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
             // Waiting for polarity change to complete
             if (slave->integerPolarity == slave->unimag.targetPolarity) {
                 // Polarity changed successfully - now go ON and ramp to setpoint
-                unimag_startTimer(slave);
+                unimag_nextStep(slave);
                 send_command(drv, slave->addr, "ON", response, responseSize);
                 unimag_setState(slave, UNIMAG_GOING_TO_SET, "Ramping to setpoint");
                 unimag_sendSetpointCmd(slave, slave->unimag.targetCurrent);
             } else if (unimag_isTimeout(slave)) {
-                unimag_setState(slave, UNIMAG_NOT_REACHED, "Failed: Polarity change failed");
-                slave->unimag.busy = 0;
+                if (unimag_retry(slave, "Polarity not changed")) {
+                    send_command(drv, slave->addr, (char*)unimag_polarityCmd(slave), response, responseSize);
+                } else {
+                    unimag_fail(slave, 0, "Failed: Polarity change failed");
+                }
             }
             break;
             
@@ -1620,11 +1701,30 @@ void unimag_process(OCEM_Driver *drv, OCEM_Slave *slave)
                     unimag_setState(slave, UNIMAG_OK, "Setpoint reached");
                     slave->unimag.busy = 0;
                 } else if (unimag_isTimeout(slave)) {
-                    // Timeout - fail immediately (no retries)
-                    char msg[80];
-                    snprintf(msg, sizeof(msg), "Failed: Setpoint not reached (err=%.2fA)", error);
-                    unimag_setState(slave, UNIMAG_NOT_REACHED, msg);
-                    slave->unimag.busy = 0;
+                    // Only a supply still ON gets the setpoint again: it may
+                    // have been put in STANDBY while ramping
+                    if (slave->channelState == CH_ON && unimag_retry(slave, "Setpoint not reached")) {
+                        unimag_sendSetpointCmd(slave, slave->unimag.targetCurrent);
+                    } else {
+                        char msg[80];
+                        snprintf(msg, sizeof(msg), "Failed: Setpoint not reached (err=%.2fA)", error);
+                        unimag_fail(slave, 1, msg);
+                    }
+                }
+            }
+            break;
+            
+        case UNIMAG_GOING_TO_STATE:
+            if (slave->channelState == slave->unimag.targetState) {
+                unimag_setState(slave, UNIMAG_OK, "State reached");
+                slave->unimag.busy = 0;
+            } else if (unimag_isTimeout(slave)) {
+                if (unimag_retry(slave, "State not reached")) {
+                    send_command(drv, slave->addr,
+                                 slave->unimag.targetState == CH_ON ? "ON" : "STB",
+                                 response, responseSize);
+                } else {
+                    unimag_fail(slave, 0, "Failed: State not reached");
                 }
             }
             break;

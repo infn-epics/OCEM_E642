@@ -546,7 +546,7 @@ static long so_write(stringoutRecord *prec)
         if (!slave) return -1;
         
         // Check if busy
-        if (slave->unimag.busy) {
+        if (unimag_isBusy(slave)) {
             errlogPrintf("UNIMAG_CURRENT_SP: rejected (busy)\n");
             return -1;
         }
@@ -576,7 +576,7 @@ static long so_write(stringoutRecord *prec)
         }
 
         // Check if busy - but always allow RESET to clear errors
-        if (slave->unimag.busy && targetState != CH_RESET) {
+        if (unimag_isBusy(slave) && targetState != CH_RESET) {
             errlogPrintf("UNIMAG_STATE_SP: rejected (busy)\n");
             return -1;
         }
@@ -592,6 +592,7 @@ static long so_write(stringoutRecord *prec)
     int status=send_command(drv,p->addr,prec->val,response,responseSize);
     if (status != 0) {
         errlogPrintf("OCEM write failed (addr=%d, cmd=%s)\n", p->addr, prec->val);
+        epicsMutexUnlock(drv->ioLock);
         return -1;
     }
     epicsMutexUnlock(drv->ioLock);
@@ -672,7 +673,7 @@ static long ao_write(aoRecord *prec)
         errlogPrintf("UNIMAG[%d]: retry_delay = %.1f s\n", p->addr, prec->val);
     } else if (strcasecmp(p->var, "UNIMAG_CURRENT_SP") == 0) {
         // Allow ao record for current setpoint (alternative to stringout)
-        if (slave->unimag.busy) {
+        if (unimag_isBusy(slave)) {
             errlogPrintf("UNIMAG_CURRENT_SP: rejected (busy)\n");
             return -1;
         }
@@ -800,6 +801,8 @@ static long longin_read(longinRecord *prec)
     
     if (strcasecmp(p->var, "UNIMAG_STATE") == 0) {
         prec->val = (epicsInt32)slave->unimag.state;
+    } else if (strcasecmp(p->var, "STATE_SM") == 0) {
+        prec->val = (epicsInt32)unimag_getStateSM(slave);
     } else if (strcasecmp(p->var, "CHANNEL_STATE") == 0) {
         prec->val = (epicsInt32)slave->channelState;
     } else if (strcasecmp(p->var, "UNIMAG_BUSY") == 0) {
@@ -838,6 +841,7 @@ static long longin_get_ioint_info(int cmd, longinRecord *prec, IOSCANPVT *ppvt) 
     errlogPrintf("li_get_ioint_info: %s %d\n", p->var, p->addr);
     
     if (strcasecmp(p->var, "UNIMAG_STATE") == 0 ||
+        strcasecmp(p->var, "STATE_SM") == 0 ||
         strcasecmp(p->var, "CHANNEL_STATE") == 0 ||
         strcasecmp(p->var, "UNIMAG_BUSY") == 0 ||
         strcasecmp(p->var, "RETRY_COUNT") == 0 ||
@@ -897,12 +901,6 @@ static long longout_init_record(longoutRecord *prec)
     pvt->var[sizeof(pvt->var)-1] = '\0';
     prec->dpvt = pvt;
     
-    // Initialize with current value
-    OCEM_Slave* slave = findSlave(drv, addr);
-    if (slave && strcasecmp(varname, "MAX_RETRIES") == 0) {
-        prec->val = slave->unimagCfg.maxRetries;
-    }
-    
     return 0;
 }
 
@@ -935,7 +933,7 @@ static long longout_write(longoutRecord *prec)
                 errlogPrintf("UNIMAG_STATE_SP: invalid state %ld\n", prec->val);
                 return -1;
         }
-        if (slave->unimag.busy && targetState != CH_RESET) {
+        if (unimag_isBusy(slave) && targetState != CH_RESET) {
             errlogPrintf("UNIMAG_STATE_SP: rejected (busy)\n");
             return -1;
         }
